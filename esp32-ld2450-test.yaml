@@ -1,0 +1,45 @@
+esphome:
+  name: esp32-ld2450
+  friendly_name: esp32-ld2450
+
+esp32:
+  board: esp32dev
+  framework:
+    type: arduino
+    version: recommended
+
+external_components:
+  - source:
+      type: local
+      path: ./components
+
+logger:
+  level: VERBOSE
+  
+api:
+ota:
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+  use_address: esp32-ld2450.lan
+  fast_connect: True
+
+# Example configuration entry
+uart:
+  id: uart_bus
+  tx_pin: GPIO25 #TX
+  rx_pin: GPIO27 #RX
+  baud_rate: 256000
+  parity: NONE
+  stop_bits: 1
+
+ld2450:
+
+sensor:
+  - platform: ld2450
+    target_1_x:
+      name: Target X
+    target_1_y:
+      name: Target Y
+    target_1_res:
+      name: Target Res
