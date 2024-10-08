@@ -1,0 +1,39 @@
+alias: Temp Light ON/OFF
+fields:
+  light:
+    selector:
+      target:
+        entity:
+          domain: light
+    name: Light
+    required: true
+    description: The light to turn on, then turn off with a delay.
+  delay:
+    selector:
+      number:
+        min: 0
+        max: 3600
+        step: 10
+    name: Delay
+    required: true
+    default: 60
+  brightness:
+    selector:
+      number:
+        min: 0
+        max: 100
+        step: 5
+    name: Brightness
+    required: true
+    default: 50
+sequence:
+  - parallel:
+      - action: light.turn_on
+        target: '{{ light }}'
+        data:
+          brightness_pct: '{{ brightness }}'
+      - sequence:
+          - delay: '{{ delay }}'
+          - action: light.turn_off
+            target: '{{ light }}'
+description: ''

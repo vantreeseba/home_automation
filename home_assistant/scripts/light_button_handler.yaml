@@ -1,0 +1,42 @@
+alias: Light Button Handler
+sequence:
+  - choose:
+      - conditions:
+          - condition: template
+            value_template: "{{ triggerid == 'short' }}"
+        sequence:
+          - action: light.toggle
+            target:
+              entity_id: '{{ light }}'
+        alias: On/Off (short)
+      - conditions:
+          - condition: template
+            value_template: "{{ triggerid == 'double' }}"
+        sequence:
+          - if:
+              - condition: template
+                value_template: "{{ state_attr(light, 'brightness') > 120 }}"
+            then:
+              - action: light.turn_on
+                target:
+                  entity_id: '{{ light }}'
+                data:
+                  brightness_pct: 40
+            else:
+              - action: light.turn_on
+                target:
+                  entity_id: '{{ light }}'
+                data:
+                  brightness_pct: 85
+        alias: Brightness Toggle (double)
+fields:
+  light:
+    selector:
+      entity: {}
+    name: Light
+    required: true
+  triggerid:
+    selector:
+      text: null
+    name: triggerId
+description: ''
