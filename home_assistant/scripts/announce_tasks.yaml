@@ -47,19 +47,18 @@ sequence:
     data:
       status: needs_action
     response_variable: todo_items
-  - service: tts.speak
-    metadata: {}
+  - metadata: {}
     target:
       entity_id: '{{ tts_target }}'
     data:
       cache: false
       message: >
         {% set list_voicemail = todo_items[todo_list]['items'] |
-        map(attribute='summary') %}  
-        You have {{todo_items[todo_list]['items'] | list | count }} items to do on {% todo_items[todo_list]['name'] %}
-        {% endif %} 
+        map(attribute='summary') %}    You have {{todo_items[todo_list]['items']
+        | list | count }} items on {{ state_attr(todo_list, 'friendly_name') }}. 
         {% for vm in list_voicemail %}
-          {{ loop.index }}: {{ vm }}
+          {{ loop.index }}: {{ vm }}.
         {% endfor %}
       media_player_entity_id: '{{ announce_player }}'
+    action: tts.speak
 description: ''
