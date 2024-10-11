@@ -1,0 +1,65 @@
+alias: Announce Todo List
+fields:
+  todo_list:
+    name: Urgent Todo List
+    description: Select the todo list that contains items you want read to you
+    selector:
+      entity:
+        filter:
+          - domain: todo
+    required: true
+  tts_target:
+    required: true
+    name: TTS to Use
+    description: What TTS service to use.
+    selector:
+      entity:
+        filter:
+          - domain: tts
+  announce_player:
+    required: true
+    name: Media Player
+    description: What device do you want your todo items read to you on?
+    selector:
+      entity:
+        filter:
+          - domain: media_player
+  announcement_volume:
+    required: true
+    name: Announcement Volume
+    description: Set the volume of the device used for announcements
+    default: 0.4
+    selector:
+      number:
+        min: 0
+        max: 1
+        step: 0.05
+        mode: slider
+sequence:
+  - action: media_player.volume_set
+    data:
+      volume_level: '{{ announcement_volume }}'
+    target:
+      entity_id: '{{ announce_player }}'
+  - action: todo.get_items
+    target:
+      entity_id: '{{ todo_list }}'
+    data:
+      status: needs_action
+    response_variable: todo_items
+  - service: tts.speak
+    metadata: {}
+    target:
+      entity_id: '{{ tts_target }}'
+    data:
+      cache: false
+      message: >
+        {% set list_voicemail = todo_items[todo_list]['items'] |
+        map(attribute='summary') %}  
+        You have {{todo_items[todo_list]['items'] | list | count }} items to do on {% todo_items[todo_list]['name'] %}
+        {% endif %} 
+        {% for vm in list_voicemail %}
+          {{ loop.index }}: {{ vm }}
+        {% endfor %}
+      media_player_entity_id: '{{ announce_player }}'
+description: ''
