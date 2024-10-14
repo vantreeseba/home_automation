@@ -3,17 +3,18 @@ blueprint:
   description: Auto add tasks to a todo list for when batteries on entities are low.
   domain: automation
   input:
-    light_entity:
-      name: Light entity
+    entities_with_battery:
+      multiple: true
+      name: Battery Entities 
       selector:
         entity:
           domain: sensor
 variables:
-  light_entity: !input "light_entity"
+  light_entity: !input 'light_entity'
 trigger:
   platform: template
   value_template: "{{ states(light_entity) == 'on' }}"
 condition: []
 action:
   - service: light.turn_off
-    entity_id: !input "light_entity"
+    entity_id: !input 'light_entity'
