@@ -18,6 +18,11 @@ blueprint:
         entity:
           multiple: true
           domain: sensor
+    todo_list:
+      name: List to add tasks to.
+      selector:
+        entity:
+          domain: todo
 variables:
   battery_level: !input 'battery_level'
   entities_with_battery: !input 'entities_with_battery'
