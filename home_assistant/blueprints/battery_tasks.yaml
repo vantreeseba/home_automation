@@ -4,9 +4,9 @@ blueprint:
   domain: automation
   input:
     entities_with_battery:
-      multiple: true
       name: Battery Entities 
       selector:
+        multiple: true
         entity:
           domain: sensor
 variables:
