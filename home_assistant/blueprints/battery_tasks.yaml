@@ -4,9 +4,7 @@ blueprint:
   domain: automation
   input:
     battery_level:
-      required: true
       name: Low battery level
-      description:
       default: 40
       selector:
         number:
