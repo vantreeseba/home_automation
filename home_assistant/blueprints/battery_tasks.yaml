@@ -10,11 +10,11 @@ blueprint:
           multiple: true
           domain: sensor
 variables:
-  light_entity: !input 'light_entity'
-trigger:
-  platform: template
-  value_template: "{{ states(light_entity) == 'on' }}"
-condition: []
-action:
-  - service: light.turn_off
-    entity_id: !input 'light_entity'
+  entities_with_battery: !input 'entities_with_battery'
+# trigger:
+#   platform: template
+#   value_template: "{{ states(light_entity) == 'on' }}"
+# condition: []
+# action:
+#   - service: light.turn_off
+#     entity_id: !input 'light_entity'
