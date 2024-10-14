@@ -6,8 +6,8 @@ blueprint:
     entities_with_battery:
       name: Battery Entities 
       selector:
-        multiple: true
         entity:
+          multiple: true
           domain: sensor
 variables:
   light_entity: !input 'light_entity'
