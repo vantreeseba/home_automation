@@ -1,0 +1,67 @@
+alias: Announce Calender
+fields:
+  tts_target:
+    required: true
+    name: TTS to Use
+    description: What TTS service to use.
+    selector:
+      entity:
+        filter:
+          - domain: tts
+  announce_player:
+    required: true
+    name: Media Player
+    description: What device do you want your todo items read to you on?
+    selector:
+      entity:
+        filter:
+          - domain: media_player
+  announcement_volume:
+    required: true
+    name: Announcement Volume
+    description: Set the volume of the device used for announcements
+    default: 0.4
+    selector:
+      number:
+        min: 0
+        max: 1
+        step: 0.05
+        mode: slider
+  calendar_name:
+    required: true
+    default: vantreeseba@gmail.com
+    selector:
+      text: null
+    name: Calendar Name
+sequence:
+  - action: calendar.get_events
+    target:
+      entity_id: calendar.{{ slugify(calendar_name) }}
+    data:
+      start_date_time: "{{ today_at().strftime('%Y-%m-%d %H:%M') }}"
+      duration:
+        hours: 24
+    response_variable: list_events_response
+  - action: media_player.volume_set
+    data:
+      volume_level: "{{ announcement_volume }}"
+    target:
+      entity_id: "{{ announce_player }}"
+  - metadata: {}
+    target:
+      entity_id: "{{ tts_target }}"
+    data:
+      cache: false
+      message: >
+        {% set calendar_key = 'calendar.' ~ slugify(calendar_name) %} {% set cal
+        = list_events_response[calendar_key] %}      {% set cal_events =
+        cal['events'] %}
+
+        You have {{cal_events | list | count }} items on {{
+        state_attr(calendar_key, 'friendly_name')}}.   {% for calendar_event in
+        cal_events %}
+          At {{ as_timestamp(calendar_event.start) | timestamp_custom('%-I:%M') }} {{ calendar_event.summary }},,
+        {% endfor %}
+      media_player_entity_id: "{{ announce_player }}"
+    action: tts.speak
+description: ""
