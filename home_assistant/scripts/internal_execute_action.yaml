@@ -1,0 +1,28 @@
+alias: (Internal) Execute Action
+fields:
+  actions_to_execute:
+    name: Action
+    required: true
+    selector:
+      action: null
+sequence:
+- repeat:
+    for_each: "{{ actions_to_execute }}"
+    sequence:
+      - choose:
+        - conditions: "{{ repeat.item.target is defined and repeat.item.data is defined }}"
+          sequence:
+            - action: "{{ repeat.item.action }}"
+              target: "{{ repeat.item.target }}"
+              data: "{{ repeat.item.data }}"
+        - conditions: "{{ repeat.item.target is defined }}"
+          sequence:              
+            - action: "{{ repeat.item.action }}"
+              target: "{{ repeat.item.target }}"
+        - conditions: "{{ repeat.item.data is defined }}"
+          sequence:              
+            - action: "{{ repeat.item.action }}"
+              data: "{{ repeat.item.data }}"
+        default:
+            - action: "{{ repeat.item.action }}"
+description: ""
