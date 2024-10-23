@@ -1,0 +1,31 @@
+alias: "Todo: Item exists"
+sequence:
+  - target:
+      entity_id: "{{ list }}"
+    response_variable: todo
+    action: todo.get_items
+  - variables:
+      result: >
+        {% set x = (item in todo[list]['items'] | map(attribute='summary')) %}
+        {% set item = todo[list]['items'] | selectattr('summary', 'eq', item) |
+        list | first | default([]) %} {{ {'exists': x, 'item': item} }}
+  - stop: Finished
+    response_variable: result
+mode: single
+icon: mdi:checkbox-marked-circle-auto-outline
+fields:
+  list:
+    selector:
+      entity:
+        filter:
+          domain: todo
+    name: List
+    required: true
+    description: The todo list entity
+  item:
+    selector:
+      text: null
+    name: Item
+    description: The todo item to check
+    required: true
+description: Checks if a todo item with the given name exists on the list.
