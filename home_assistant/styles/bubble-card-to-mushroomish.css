@@ -1,0 +1,7 @@
+.large .bubble-button-card-container,
+.bubble-button-card-container, 
+.bubble-range-slider, 
+.bubble-button-card, 
+.bubble-button-background {
+  border-radius: 12px;
+}
