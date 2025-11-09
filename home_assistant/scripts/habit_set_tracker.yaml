@@ -1,0 +1,191 @@
+alias: Habit Set Tracker
+description: ""
+fields:
+  set_duration:
+    selector:
+      duration: {}
+    default:
+      hours: 0
+      minutes: 25
+      seconds: 0
+    name: Set Duration
+    description: The duration of a set.
+    required: true
+  short_break_duration:
+    selector:
+      duration: {}
+    default:
+      hours: 0
+      minutes: 5
+      seconds: 0
+    name: Short Break Duration
+    description: The duration of a short break.
+    required: true
+  long_break_duration:
+    selector:
+      duration: {}
+    default:
+      hours: 0
+      minutes: 30
+      seconds: 0
+    name: Long Break Duration
+    description: The duration of a long break.
+    required: true
+  timer_entity:
+    selector:
+      entity:
+        filter:
+          - domain: timer
+    name: Timer Entity
+    description: The timer entity to track durations with.
+    required: true
+  set_counter_entity:
+    selector:
+      entity:
+        filter:
+          - domain: counter
+    name: Set Counter Entity
+    required: true
+    description: The counter entity to track completed sets with.
+  state_select:
+    selector:
+      entity:
+        filter:
+          - domain: input_select
+    name: State Select
+    description: A selector with states of the set (active, short break, long break, idle)
+    required: true
+  set_count:
+    selector:
+      number:
+        min: 1
+        max: 20
+        step: 1
+    required: true
+    name: Set Count
+    description: The number of sets before a long break.
+  on_set_start_actions:
+    name: On Set Start
+    required: true
+    selector:
+      action: null
+  on_set_finished_actions:
+    name: On Set Finished
+    required: true
+    selector:
+      action: null
+  on_long_break_actions:
+    name: On Long Break
+    required: true
+    selector:
+      action: null
+  on_long_break_finished_actions:
+    name: On Long Break Finished
+    required: true
+    selector:
+      action: null
+sequence:
+  - alias: Repeat Sets
+    repeat:
+      while:
+        - condition: template
+          value_template: "{{ states(set_counter_entity) | int < set_count }}"
+      sequence:
+        - parallel:
+            - action: script.turn_on
+              target:
+                entity_id: script.execute_action
+              data:
+                variables:
+                  actions_to_execute: "{{ on_set_start_actions }}"
+            - action: input_select.select_option
+              data:
+                option: ACTIVE
+              target:
+                entity_id: "{{ state_select }}"
+            - action: timer.start
+              data:
+                duration: "{{ set_duration }}"
+              target:
+                entity_id: "{{ timer_entity }}"
+          alias: Do Set
+        - wait_for_trigger:
+            - trigger: state
+              entity_id:
+                - timer.habit_timer
+              to:
+                - idle
+              for:
+                hours: 0
+                minutes: 0
+                seconds: 0
+        - alias: Do Short Break
+          parallel:
+            - action: script.turn_on
+              target:
+                entity_id: script.execute_action
+              data:
+                variables:
+                  actions_to_execute: "{{ on_set_finished_actions }}"
+            - action: input_select.select_option
+              data:
+                option: SHORT_BREAK
+              target:
+                entity_id: "{{ state_select }}"
+            - action: timer.start
+              data:
+                duration: "{{ short_break_duration }}"
+              target:
+                entity_id: "{{ timer_entity }}"
+        - wait_for_trigger:
+            - trigger: state
+              entity_id:
+                - timer.habit_timer
+              to:
+                - idle
+              for:
+                hours: 0
+                minutes: 0
+                seconds: 0
+        - action: counter.increment
+          target:
+            entity_id: "{{ set_counter_entity }}"
+  - alias: Do Long Break
+    sequence:
+      - parallel:
+          - action: script.turn_on
+            target:
+              entity_id: script.execute_action
+            data:
+              variables:
+                actions_to_execute: "{{ on_long_break_actions }}"
+          - action: input_select.select_option
+            data:
+              option: LONG_BREAK
+            target:
+              entity_id: "{{ state_select }}"
+          - action: timer.start
+            data:
+              duration: "{{ long_break_duration }}"
+            target:
+              entity_id: "{{ timer_entity }}"
+      - wait_for_trigger:
+          - trigger: state
+            entity_id:
+              - timer.habit_timer
+            to:
+              - idle
+      - action: counter.reset
+        target:
+          entity_id: "{{ set_counter_entity }}"
+  - action: input_select.select_option
+    data:
+      option: IDLE
+    target:
+      entity_id: "{{ state_select }}"
+  - action: script.turn_on
+    target:
+      entity_id: script.execute_action
+    data:
+      variables:
+        actions_to_execute: "{{ on_long_break_finished_actions }}"
