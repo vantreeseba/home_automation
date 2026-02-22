@@ -1,3 +1,13 @@
+font:
+    # gfonts://family[@weight]
+  - file: 
+      type: gfonts
+      family: Roboto
+      weight: 900
+    id: roboto_20
+    size: 48
+    bpp: 8
+
 lvgl:
   default_font: roboto_20
   style_definitions:
