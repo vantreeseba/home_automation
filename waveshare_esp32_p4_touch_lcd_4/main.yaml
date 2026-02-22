@@ -1,5 +1,3 @@
-
- 
 esp32_hosted:
   active_high: true
   variant: ESP32C6
