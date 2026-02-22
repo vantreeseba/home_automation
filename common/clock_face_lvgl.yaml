@@ -1,0 +1,97 @@
+lvgl:
+  default_font: roboto_20
+  style_definitions:
+    - id: needle_style
+      radius: 16
+  on_idle:
+    timeout: !lambda "return (id(display_timeout).state * 1000);"
+    then:
+      - logger.log: "LVGL is idle"
+      - light.turn_off: backlight_light
+      - lvgl.pause:
+  top_layer:
+    widgets:
+    - spinner:
+        height: 600
+        width: 600
+        hidden: true
+        align: center
+        spin_time: 2s
+        arc_length: 60deg
+        arc_opa: 0
+        id: va_spinner_id
+        indicator:
+          arc_width: 80
+          arc_color: 0xcccc00
+  pages:
+    - id: clock_page
+      widgets:
+        - obj: # clock container
+            height: SIZE_CONTENT
+            width: 720
+            align: CENTER
+            pad_all: 0
+            border_width: 0
+            bg_color: 0xFFFFFF
+            widgets:
+              - meter: # clock face
+                  height: 720
+                  width: 720
+                  align: CENTER
+                  border_width: 0
+                  pad_all: 128
+                  text_color: 0x000000
+                  ticks:
+                    radius: 16
+                    line_rounded: true
+                  indicator:
+                    radius: 16
+                    line_rounded: true
+                  scales:
+                    - range_from: 0 # minutes scale
+                      range_to: 60
+                      angle_range: 360
+                      rotation: 270
+                      ticks:
+                        width: 4
+                        count: 61
+                        length: 4
+                      indicators:
+                        - line:
+                            id: minute_hand
+                            width: 6
+                            r_mod: -4
+                            value: 0
+                    - range_from: 1 # hours scale for labels
+                      range_to: 12
+                      angle_range: 330
+                      rotation: 300
+                      ticks:
+                        width: 8
+                        count: 12
+                        length: 8
+                        major:
+                          stride: 1
+                          width: 8
+                          length: 8
+                          label_gap: -64
+                    - range_from: 0 # hi-res hours scale for hand
+                      range_to: 720
+                      angle_range: 360
+                      rotation: 270
+                      ticks:
+                        count: 0
+                      indicators:
+                        - line:
+                            id: hour_hand
+                            width: 10
+                            r_mod: -30
+                            value: 0
+              - label:
+                  # styles: date_style
+                  id: day_label
+                  y: -30
+              - label:
+                  id: date_label
+                  # styles: date_style
+                  y: 30
