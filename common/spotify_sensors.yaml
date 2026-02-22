@@ -1,0 +1,19 @@
+text_sensor:
+  - platform: homeassistant
+    id: current_title
+    entity_id: sensor.esp32_media_player_current_title
+  - platform: homeassistant
+    id: current_artist
+    entity_id: sensor.esp32_media_player_current_artist
+  - platform: homeassistant
+    id: current_playlist
+    entity_id: sensor.esp32_media_player_current_playlist
+  - platform: homeassistant
+    id: spotify
+    entity_id: sensor.esp32_media_player_status
+  - platform: homeassistant
+    id: spotpostime
+    entity_id: sensor.esp32_spotify_position_time
+  - platform: homeassistant
+    id: spotdur
+    entity_id: sensor.esp32_spotify_duration
