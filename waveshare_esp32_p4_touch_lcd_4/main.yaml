@@ -95,7 +95,7 @@ switch:
 
 touchscreen:
   - platform: gt911
-    id: touchscreen
+    id: touchscreen_
 
 ## PANEL BACKLIGHT CONFIG
 output:
