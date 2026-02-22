@@ -112,3 +112,32 @@ switch:
 touchscreen:
   - platform: gt911
     id: touchscreen
+
+## PANEL BACKLIGHT CONFIG
+output:
+  - platform: ledc
+    id: backlight_
+    pin: GPIO26
+    frequency: 100Hz
+    inverted: true
+    # min_power: 0.1 # To prevent the backlight from being too dim
+    max_power: 0.8 # To prevent overheating due to excessive lighting
+    
+light:
+  - platform: monochromatic
+    name: "backlight"
+    output: backlight_
+    id: backlight_light
+    restore_mode: ALWAYS_ON
+ 
+## MIPI DSI CONFIG
+esp_ldo:
+  - channel: 3
+    voltage: 2.5V
+ 
+display:
+  - platform: mipi_dsi
+    model: WAVESHARE-ESP32-P4-WIFI6-TOUCH-LCD-4C
+    pixel_mode: 16bit
+    color_depth: 16
+    draw_rounding: 4
