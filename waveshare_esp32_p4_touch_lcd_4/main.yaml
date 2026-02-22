@@ -10,7 +10,6 @@ external_components:
     components: [audio, resampler]
     refresh: 1h
 
-
 psram:
   speed: 200MHz
  
