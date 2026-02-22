@@ -1,17 +1,4 @@
-esp32:
-  board: esp32-p4-evboard
-  flash_size: 32Mb
-  cpu_frequency: 360MHZ
-  framework:
-    type: esp-idf
 
-external_components:
-  - source: github://pr#9675
-    components: [audio, resampler]
-    refresh: 1h
-
-psram:
-  speed: 200MHz
  
 esp32_hosted:
   active_high: true
