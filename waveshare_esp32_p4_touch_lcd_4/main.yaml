@@ -46,11 +46,11 @@ microphone:
     bits_per_sample: 16bit
     adc_type: external
 
-  - platform: resampler
-    id: resampler_mic
-    microphone: esp32_microphone
-    sample_rate: 16000
-    bits_per_sample: 16
+  # - platform: resampler
+  #   id: resampler_mic
+  #   microphone: esp32_microphone
+  #   sample_rate: 16000
+  #   bits_per_sample: 16
     
 
 speaker:
