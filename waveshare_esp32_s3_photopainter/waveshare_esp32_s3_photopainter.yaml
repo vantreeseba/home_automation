@@ -1,0 +1,277 @@
+substitutions:
+  display_pixel_width: '480'   # Right most visible pixel
+  display_pixel_height: '800'   # bottom most visible pixel -- 
+  display_min_pixel_x: '0'
+  display_min_pixel_y: '0'
+  display_rotation: '90°'
+
+logger:
+ota:
+  - platform: esphome
+
+wifi:
+  id: wifi_id
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+  fast_connect: True
+
+esphome:
+  name: photo-frame-1
+  friendly_name: Photo Frame 1
+  on_boot:
+    priority: 800
+    then:
+      - lambda: |- # Turn on the power of the display
+          id(bus).write(0x34, (uint8_t[]){0x95, 0x1C}, 2);
+
+esp32:
+  board: esp32-s3-devkitc-1
+  flash_size: 16MB
+  framework:
+    type: esp-idf
+
+psram:
+  mode: octal
+
+api:
+  on_client_connected:
+    lambda: |-
+      ESP_LOGW("${TAG}", "Client %s connected to API with IP %s", client_info.c_str(), client_address.c_str());
+      id(home_assistant_local_ip) = client_address.c_str(); // Example value: 192.168.31.177
+
+  actions:
+  - action: epaper_reload_image
+    then:
+      - lambda: |-
+          id(online_image_id).update();
+
+  - action: epaper_render
+    then:
+      - lambda: |-
+          id(my_display).update();
+
+  - action: epaper_set_image_url
+    variables:
+      url: string
+    then:
+      - online_image.set_url:
+          url: !lambda |-
+            ESP_LOGI("${TAG}", "Set image URL: %s", url.c_str());
+
+            auto call = id(image_url).make_call();
+            call.set_value(url.c_str());
+            call.perform();
+
+            return url.c_str();
+          id: online_image_id
+
+  - action: epaper_set_local_image_url
+    variables:
+      local_url: string
+    then:
+      - online_image.set_url:
+          url: !lambda |-
+            static char buf[200];
+            snprintf(buf, sizeof(buf), "http://%s:8123/local/%s", id(home_assistant_local_ip).c_str(), local_url.c_str());
+            ESP_LOGI("${TAG}", "Set local URL: %s --> %s", local_url.c_str(), buf);
+
+            auto call = id(image_url).make_call();
+            call.set_value(buf);
+            call.perform();
+
+            return buf;
+          id: online_image_id
+
+http_request:
+  verify_ssl: false
+  useragent: esphome/1.0
+  timeout: 120s
+
+online_image:
+  - url: '' 
+    format: PNG
+    id: online_image_id
+    buffer_size: 32768
+    resize: ${display_pixel_width}x${display_pixel_height}
+    type: RGB
+    on_download_finished:
+      - then:
+        - lambda: |-
+            ESP_LOGI("online_image", "Image download finished");
+            id(image_downloading_events).trigger("image_downloading_complete");
+        - component.update: my_display
+    on_error:
+        - lambda: |-
+            ESP_LOGE("online_image", "Could not download the image");
+            id(image_downloading_events).trigger("image_downloading_failed");
+
+# event configuration
+event:
+  - platform: template
+    name: Rendering
+    id: rendering_events
+    icon: "mdi:brush"
+    event_types:
+      - render_complete
+  - platform: template
+    name: Image Downloading
+    id: image_downloading_events
+    icon: "mdi:download"
+    event_types:
+      - image_downloading_complete
+      - image_downloading_failed
+
+switch:
+  - platform: template
+    name: "Download and render on startup"
+    id: auto_load_render
+    icon: "mdi:cloud-download-outline"
+    restore_mode: RESTORE_DEFAULT_ON
+    optimistic: true
+
+interval:
+  - interval: 1h  # Base interval for the check
+    then:
+      - lambda: |-
+          if (id(auto_screen_refresh).state > 0) {
+            id(auto_refresh_counter)++;
+
+            if (id(auto_refresh_counter) >= id(auto_screen_refresh).state) {
+              id(auto_refresh_counter) = 0;  // Reset counter
+              ESP_LOGI("${TAG}", "Timer triggered re-rendering");
+              id(my_display).update();
+            }
+          }
+
+number:
+  - platform: template
+    name: "Auto Screen refresh"
+    id: auto_screen_refresh
+    unit_of_measurement: "h"
+    icon: "mdi:refresh-auto"
+    optimistic: true
+    min_value: 0
+    max_value: 96
+    step: 1
+    initial_value: 0
+    on_value:
+      then:
+        - lambda: |-
+            id(auto_refresh_counter) = 0;  // Reset counter
+            if (x == 0) {
+              ESP_LOGI("${TAG}", "Disable auto screen refresh");
+            } else {
+              ESP_LOGI("${TAG}", "Auto screen refresh updated: %.0fh", x);
+            }
+
+
+globals:
+  - id: auto_refresh_counter
+    type: int
+    restore_value: no
+    initial_value: '0'
+  - id: home_assistant_local_ip
+    type: std::string
+    restore_value: yes
+    max_restore_data_length: 50
+    initial_value: '"homeassistant.local"'
+
+button:
+  - platform: template
+    name: "Reload image"
+    entity_category: diagnostic
+    on_press:
+      - lambda: |-
+          id(online_image_id).update();
+
+  - platform: template
+    name: "Render"
+    entity_category: diagnostic
+    on_press:
+      - lambda: |-
+          id(my_display).update();
+
+text:
+  - platform: template
+    id: image_url
+    name: "Image URL"
+    icon: "mdi:image"
+    mode: text
+    optimistic: true
+    restore_value: yes
+    initial_value: '' 
+    on_value: 
+      then:
+        - online_image.set_url:
+            url: !lambda |-
+              return id(image_url).state.c_str();
+            id: online_image_id
+
+i2c:
+  id: bus
+  sda: GPIO47
+  scl: GPIO48
+  scan: true
+
+sensor:
+  - platform: shtcx
+    temperature:
+      id: temperature
+      unit_of_measurement: "°C"
+      device_class: temperature
+      state_class: measurement
+      accuracy_decimals: 1
+    humidity:
+      id: humidity
+      unit_of_measurement: "%"
+      device_class: humidity
+      state_class: measurement
+
+spi:
+  clk_pin: GPIO10
+  mosi_pin: GPIO11
+
+display:
+  - platform: epaper_spi
+    id: my_display
+    model: 7.3in-spectra-e6
+    cs_pin: GPIO9
+    dc_pin: GPIO8
+    busy_pin: 
+      number: GPIO13
+      inverted: true
+      mode:
+        input: true
+        pullup: true
+    reset_pin: 
+      number: GPIO12
+    update_interval: never
+    rotation: 270°
+    show_test_card: true
+    lambda: |-
+      static const char *TAG = "${TAG} - Rendering cycle";
+
+      ESP_LOGW(TAG, "Rendering...");
+      //# id(deep_sleep_id).prevent_deep_sleep();
+
+      it.fill(COLOR_OFF);
+      if(id(wifi_id).is_connected()) {
+        // Fullscreen online image
+        it.image(${display_min_pixel_x}, ${display_min_pixel_y}, id(online_image_id), COLOR_OFF, COLOR_ON);
+      } else { 
+        ESP_LOGW(TAG, "Wifi not connected. Using offline image");
+        // Centered offline image
+        int mid_x = $display_min_pixel_x + $display_pixel_width / 2;
+        int mid_y = $display_min_pixel_y + $display_pixel_height / 2;
+        it.circle(mid_x, mid_y, 10);
+        //it.image(mid_x - id(offline_image_id).get_width()/2, mid_y - id(offline_image_id).get_height()/2, id(offline_image_id), COLOR_OFF, COLOR_ON);
+      }
+
+      ESP_LOGW(TAG, "Rendering done");
+      //id(deep_sleep_id).allow_deep_sleep();
+      id(rendering_events).trigger("render_complete");
+
+font:
+  - file: "gfonts://Roboto"
+    id: roboto_20
+    size: 20
