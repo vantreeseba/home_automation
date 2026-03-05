@@ -18,7 +18,6 @@ wifi:
 esphome:
   name: photo-frame-1
   friendly_name: Photo Frame 1
-  min_version: 2025.5.0
   on_boot:
     priority: 800
     then:
@@ -47,9 +46,18 @@ api:
           id(my_display).update();
 
 external_components:
-  - source: github://pr#12284
-    components: [generic_image, sendspin]
-    refresh: 0s
+  - source:
+      # https://github.com/esphome/esphome/pull/12284
+      type: git
+      url: https://github.com/esphome/esphome
+      ref: 119a5c25a483c58b3d58a35c8cec95495c6491c2
+    components: [sendspin]
+  - source:
+      # Dev commit hash for squash merge from PR#10212 (runtime_image, required by generic_image)
+      type: git
+      url: https://github.com/esphome/esphome
+      ref: 903971de12c1b291ca8cd367ce5cdf9af8b304ae
+    components: [runtime_image]
 
 sendspin:
   id: sendspin_hub
@@ -59,7 +67,7 @@ generic_image:
   - platform: sendspin
     id: sendspin_cover_art
     format: jpg
-    type: RGB
+    type: rgb565
     resize: ${display_pixel_width}x${display_pixel_height}
     image_source: ALBUM
     on_image_decoded:
