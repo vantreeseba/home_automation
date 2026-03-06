@@ -27,16 +27,17 @@ esphome:
     then:
       - lambda: |-
           // AXP2101 PMIC boot sequence (matches official Waveshare firmware)
-          //
+          // I2CBus raw API: write(addr, buf, len) / write_readv(addr, wbuf, wlen, rbuf, rlen)
+
           // reg 0x95 = LDO_VOL3_CTRL: set ALDO3 voltage to 3300mV (0x1C = 28 → 500 + 28*100)
           id(bus).write(0x34, (uint8_t[]){0x95, 0x1C}, 2);
-          //
+
           // reg 0x90 = LDO_ONOFF_CTRL0: enable ALDO3 (bit6) and ALDO4 (bit7)
-          // Read-modify-write to preserve any other bits
+          // Read-modify-write: send reg addr, read 1 byte back, then write [reg, newval]
           uint8_t reg90 = 0;
-          id(bus).read_register(0x34, 0x90, &reg90, 1);
+          id(bus).write_readv(0x34, (uint8_t[]){0x90}, 1, &reg90, 1);
           reg90 |= (1 << 6) | (1 << 7); // enable ALDO3 (display) and ALDO4
-          id(bus).write_register(0x34, 0x90, &reg90, 1);
+          id(bus).write(0x34, (uint8_t[]){0x90, reg90}, 2);
 
 esp32:
   board: esp32-s3-devkitc-1
@@ -123,61 +124,58 @@ generic_image:
           // AXP2101 pre-sleep shutdown sequence
           // Mirrors axp_basic_sleep_start() from Waveshare official firmware
           // Registers sourced from XPowersLib AXP2101Constants.h
+          // I2CBus raw API: write(addr, buf, len) / write_readv(addr, wbuf, wlen, rbuf, rlen)
           // ---------------------------------------------------------------
-          ESP_LOGI("deep_sleep", "Image rendered — powering down peripherals before deep sleep");
+          ESP_LOGI("deep_sleep", "Image rendered - powering down peripherals before deep sleep");
+
+          uint8_t reg = 0;
 
           // 1. Configure wakeup behaviour (reg 0x26 = SLEEP_WAKEUP_CTRL)
           //    bit2: restore power state after wake (WAKEUP_DC_DLO_SELECT)
           //    bit3: do NOT pull PWROK low on wake (WAKEUP_PWROK_TO_LOW = 0)
           //    bit4: use IRQ pin as wakeup source (WAKEUP_IRQ_PIN_TO_LOW)
-          uint8_t reg26 = 0;
-          id(bus).read_register(0x34, 0x26, &reg26, 1);
-          reg26 |=  (1 << 2);   // set   WAKEUP_DC_DLO_SELECT
-          reg26 &= ~(1 << 3);   // clear WAKEUP_PWROK_TO_LOW
-          reg26 |=  (1 << 4);   // set   WAKEUP_IRQ_PIN_TO_LOW
-          id(bus).write_register(0x34, 0x26, &reg26, 1);
+          id(bus).write_readv(0x34, (uint8_t[]){0x26}, 1, &reg, 1);
+          reg |=  (1 << 2);   // set   WAKEUP_DC_DLO_SELECT
+          reg &= ~(1 << 3);   // clear WAKEUP_PWROK_TO_LOW
+          reg |=  (1 << 4);   // set   WAKEUP_IRQ_PIN_TO_LOW
+          id(bus).write(0x34, (uint8_t[]){0x26, reg}, 2);
 
           // 2. Disable ADC measurements to save power
           //    reg 0x30 = ADC_CHANNEL_CTRL, bit0 = battery voltage measure
-          uint8_t reg30 = 0;
-          id(bus).read_register(0x34, 0x30, &reg30, 1);
-          reg30 &= ~(1 << 0);
-          id(bus).write_register(0x34, 0x30, &reg30, 1);
+          id(bus).write_readv(0x34, (uint8_t[]){0x30}, 1, &reg, 1);
+          reg &= ~(1 << 0);
+          id(bus).write(0x34, (uint8_t[]){0x30, reg}, 2);
           //    reg 0x68 = BAT_DET_CTRL, bit0 = battery detection
-          uint8_t reg68 = 0;
-          id(bus).read_register(0x34, 0x68, &reg68, 1);
-          reg68 &= ~(1 << 0);
-          id(bus).write_register(0x34, 0x68, &reg68, 1);
+          id(bus).write_readv(0x34, (uint8_t[]){0x68}, 1, &reg, 1);
+          reg &= ~(1 << 0);
+          id(bus).write(0x34, (uint8_t[]){0x68, reg}, 2);
 
           // 3. Enable PMIC sleep mode (reg 0x26 bit0)
-          id(bus).read_register(0x34, 0x26, &reg26, 1);
-          reg26 |= (1 << 0);
-          id(bus).write_register(0x34, 0x26, &reg26, 1);
+          id(bus).write_readv(0x34, (uint8_t[]){0x26}, 1, &reg, 1);
+          reg |= (1 << 0);
+          id(bus).write(0x34, (uint8_t[]){0x26, reg}, 2);
 
           // 4. Disable non-essential DC-DC rails (reg 0x80 = DC_ONOFF_DVM_CTRL)
           //    bit0=DCDC1 (3V3 main rail - keep ON for ESP32 deep sleep retention)
           //    bits 1-4 = DCDC2-5 (disable)
-          uint8_t reg80 = 0;
-          id(bus).read_register(0x34, 0x80, &reg80, 1);
-          reg80 &= ~((1<<1)|(1<<2)|(1<<3)|(1<<4)); // disable DCDC2-5, keep DCDC1
-          id(bus).write_register(0x34, 0x80, &reg80, 1);
+          id(bus).write_readv(0x34, (uint8_t[]){0x80}, 1, &reg, 1);
+          reg &= ~((1<<1)|(1<<2)|(1<<3)|(1<<4)); // disable DCDC2-5, keep DCDC1
+          id(bus).write(0x34, (uint8_t[]){0x80, reg}, 2);
 
-          // 5. Disable all LDO rails (reg 0x90 = LDO_ONOFF_CTRL0)
+          // 5. Disable ALDO1, ALDO2 first (reg 0x90 = LDO_ONOFF_CTRL0)
           //    bit4=ALDO1, bit5=ALDO2, bit6=ALDO3 (display), bit7=ALDO4
-          //    Disable ALDO1+ALDO2 first, then ALDO3+ALDO4 last (matches official order)
-          uint8_t reg90 = 0;
-          id(bus).read_register(0x34, 0x90, &reg90, 1);
-          reg90 &= ~((1<<4)|(1<<5)); // disable ALDO1, ALDO2
-          id(bus).write_register(0x34, 0x90, &reg90, 1);
+          id(bus).write_readv(0x34, (uint8_t[]){0x90}, 1, &reg, 1);
+          reg &= ~((1<<4)|(1<<5)); // disable ALDO1, ALDO2
+          id(bus).write(0x34, (uint8_t[]){0x90, reg}, 2);
 
           // 6. Disable BLDO1, BLDO2, CPUSLDO, DLDO1, DLDO2 (reg 0x91 = LDO_ONOFF_CTRL1)
-          id(bus).write_register(0x34, 0x91, (uint8_t[]){0x00}, 1);
+          id(bus).write(0x34, (uint8_t[]){0x91, 0x00}, 2);
 
           // 7. Disable ALDO3 (display power) and ALDO4 last
-          id(bus).read_register(0x34, 0x90, &reg90, 1);
-          reg90 &= ~((1<<6)|(1<<7)); // disable ALDO3 (e-paper display), ALDO4
-          id(bus).write_register(0x34, 0x90, &reg90, 1);
-          ESP_LOGI("deep_sleep", "AXP2101 shutdown complete — entering deep sleep");
+          id(bus).write_readv(0x34, (uint8_t[]){0x90}, 1, &reg, 1);
+          reg &= ~((1<<6)|(1<<7)); // disable ALDO3 (e-paper display), ALDO4
+          id(bus).write(0x34, (uint8_t[]){0x90, reg}, 2);
+          ESP_LOGI("deep_sleep", "AXP2101 shutdown complete - entering deep sleep");
       - deep_sleep.enter:
           id: deep_sleep_1
     on_image_error:
@@ -186,31 +184,31 @@ generic_image:
           id(image_downloading_events).trigger("image_downloading_failed");
 
           // AXP2101 pre-sleep shutdown (same sequence as on_image_decoded)
-          ESP_LOGW("deep_sleep", "Image failed — powering down peripherals before deep sleep");
-          uint8_t reg26 = 0, reg30 = 0, reg68 = 0, reg80 = 0, reg90 = 0;
-          id(bus).read_register(0x34, 0x26, &reg26, 1);
-          reg26 |=  (1 << 2); reg26 &= ~(1 << 3); reg26 |=  (1 << 4);
-          id(bus).write_register(0x34, 0x26, &reg26, 1);
-          id(bus).read_register(0x34, 0x30, &reg30, 1);
-          reg30 &= ~(1 << 0);
-          id(bus).write_register(0x34, 0x30, &reg30, 1);
-          id(bus).read_register(0x34, 0x68, &reg68, 1);
-          reg68 &= ~(1 << 0);
-          id(bus).write_register(0x34, 0x68, &reg68, 1);
-          id(bus).read_register(0x34, 0x26, &reg26, 1);
-          reg26 |= (1 << 0);
-          id(bus).write_register(0x34, 0x26, &reg26, 1);
-          id(bus).read_register(0x34, 0x80, &reg80, 1);
-          reg80 &= ~((1<<1)|(1<<2)|(1<<3)|(1<<4));
-          id(bus).write_register(0x34, 0x80, &reg80, 1);
-          id(bus).read_register(0x34, 0x90, &reg90, 1);
-          reg90 &= ~((1<<4)|(1<<5));
-          id(bus).write_register(0x34, 0x90, &reg90, 1);
-          id(bus).write_register(0x34, 0x91, (uint8_t[]){0x00}, 1);
-          id(bus).read_register(0x34, 0x90, &reg90, 1);
-          reg90 &= ~((1<<6)|(1<<7));
-          id(bus).write_register(0x34, 0x90, &reg90, 1);
-          ESP_LOGI("deep_sleep", "AXP2101 shutdown complete — entering deep sleep");
+          ESP_LOGW("deep_sleep", "Image failed - powering down peripherals before deep sleep");
+          uint8_t reg = 0;
+          id(bus).write_readv(0x34, (uint8_t[]){0x26}, 1, &reg, 1);
+          reg |=  (1 << 2); reg &= ~(1 << 3); reg |=  (1 << 4);
+          id(bus).write(0x34, (uint8_t[]){0x26, reg}, 2);
+          id(bus).write_readv(0x34, (uint8_t[]){0x30}, 1, &reg, 1);
+          reg &= ~(1 << 0);
+          id(bus).write(0x34, (uint8_t[]){0x30, reg}, 2);
+          id(bus).write_readv(0x34, (uint8_t[]){0x68}, 1, &reg, 1);
+          reg &= ~(1 << 0);
+          id(bus).write(0x34, (uint8_t[]){0x68, reg}, 2);
+          id(bus).write_readv(0x34, (uint8_t[]){0x26}, 1, &reg, 1);
+          reg |= (1 << 0);
+          id(bus).write(0x34, (uint8_t[]){0x26, reg}, 2);
+          id(bus).write_readv(0x34, (uint8_t[]){0x80}, 1, &reg, 1);
+          reg &= ~((1<<1)|(1<<2)|(1<<3)|(1<<4));
+          id(bus).write(0x34, (uint8_t[]){0x80, reg}, 2);
+          id(bus).write_readv(0x34, (uint8_t[]){0x90}, 1, &reg, 1);
+          reg &= ~((1<<4)|(1<<5));
+          id(bus).write(0x34, (uint8_t[]){0x90, reg}, 2);
+          id(bus).write(0x34, (uint8_t[]){0x91, 0x00}, 2);
+          id(bus).write_readv(0x34, (uint8_t[]){0x90}, 1, &reg, 1);
+          reg &= ~((1<<6)|(1<<7));
+          id(bus).write(0x34, (uint8_t[]){0x90, reg}, 2);
+          ESP_LOGI("deep_sleep", "AXP2101 shutdown complete - entering deep sleep");
       - deep_sleep.enter:
           id: deep_sleep_1
 
