@@ -35,11 +35,6 @@ psram:
 
 api:
   actions:
-  - action: epaper_reload_image
-    then:
-      - lambda: |-
-          id(sendspin_cover_art).update();
-
   - action: epaper_render
     then:
       - lambda: |-
@@ -47,27 +42,61 @@ api:
 
 external_components:
   - source:
+      # https://github.com/esphome/esphome/pull/12429
+      type: git
+      url: https://github.com/esphome/esphome
+      ref: a6c403deb7603d316dce2820897902e01c3695cc
+    refresh: 0s
+    components: [file, http_request, media_source, speaker_source]
+  - source:
       # https://github.com/esphome/esphome/pull/12284
       type: git
       url: https://github.com/esphome/esphome
       ref: 119a5c25a483c58b3d58a35c8cec95495c6491c2
-    components: [sendspin]
+    components: [sendspin,generic_image]
+
+  # The following sources are merged into the dev branch of ESPHome, but not yet in a release.
+  # We've pinned them to their specific squash merge commit id for reproducable builds.
+  # These should be available in ESPHome 2026.3.0
   - source:
-      # Dev commit hash for squash merge from PR#10212 (runtime_image, required by generic_image)
+      # Dev commit hash for squash merge from PR#10212
       type: git
       url: https://github.com/esphome/esphome
       ref: 903971de12c1b291ca8cd367ce5cdf9af8b304ae
     components: [runtime_image]
+  - source:
+      # Dev commit hash for squash merge from PR#12258
+      type: git
+      url: https://github.com/esphome/esphome
+      ref: 264c8faedd0ab956b0437ec2ecc0bacae1708923
+    components: [media_player]
+  - source:
+      # Dev commit hash for squash merge from PR#14013
+      type: git
+      url: https://github.com/esphome/esphome
+      ref: ba7134ee3f870ce00d2990d84b142b734028330f
+    components: [mdns]
+  - source:
+      # Dev commit hash for squash merge from PR#14108
+      type: git
+      url: https://github.com/esphome/esphome
+      ref: d2026b4cd74bbeb9b86941bf1887f3d93d639387
+    components: [audio]
 
 sendspin:
   id: sendspin_hub
   task_stack_in_psram: true
 
+media_player:
+  - platform: sendspin
+    id: sendspin_media_player
+    name: Sendspin Player
+
 generic_image:
   - platform: sendspin
     id: sendspin_cover_art
     format: jpg
-    type: rgb565
+    type: rgb
     resize: ${display_pixel_width}x${display_pixel_height}
     image_source: ALBUM
     on_image_decoded:
@@ -104,55 +133,7 @@ switch:
     restore_mode: RESTORE_DEFAULT_ON
     optimistic: true
 
-interval:
-  - interval: 1h  # Base interval for the check
-    then:
-      - lambda: |-
-          if (id(auto_screen_refresh).state > 0) {
-            id(auto_refresh_counter)++;
-
-            if (id(auto_refresh_counter) >= id(auto_screen_refresh).state) {
-              id(auto_refresh_counter) = 0;  // Reset counter
-              ESP_LOGI("${TAG}", "Timer triggered re-rendering");
-              id(my_display).update();
-            }
-          }
-
-number:
-  - platform: template
-    name: "Auto Screen refresh"
-    id: auto_screen_refresh
-    unit_of_measurement: "h"
-    icon: "mdi:refresh-auto"
-    optimistic: true
-    min_value: 0
-    max_value: 96
-    step: 1
-    initial_value: 0
-    on_value:
-      then:
-        - lambda: |-
-            id(auto_refresh_counter) = 0;  // Reset counter
-            if (x == 0) {
-              ESP_LOGI("${TAG}", "Disable auto screen refresh");
-            } else {
-              ESP_LOGI("${TAG}", "Auto screen refresh updated: %.0fh", x);
-            }
-
-globals:
-  - id: auto_refresh_counter
-    type: int
-    restore_value: no
-    initial_value: '0'
-
 button:
-  - platform: template
-    name: "Reload image"
-    entity_category: diagnostic
-    on_press:
-      - lambda: |-
-          id(sendspin_cover_art).update();
-
   - platform: template
     name: "Render"
     entity_category: diagnostic
@@ -200,7 +181,7 @@ display:
       number: GPIO12
     update_interval: never
     rotation: 270°
-    show_test_card: true
+    # show_test_card: true
     lambda: |-
       static const char *TAG = "${TAG} - Rendering cycle";
 
