@@ -1,4 +1,5 @@
 esp32_hosted:
+  id: hosted_esp_wifi
   variant: ESP32C6
   reset_pin: GPIO54
   cmd_pin: GPIO19
