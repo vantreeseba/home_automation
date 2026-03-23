@@ -20,7 +20,7 @@ esp_ldo:
 # Touchscreen gt911 i2c
 # -------------------------------------------
 i2c:
-  - id: bus_a
+  - id: i2c_bus
     sda: GPIO07
     scl: GPIO08
     frequency: 400kHz
