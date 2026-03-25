@@ -122,6 +122,7 @@ esp_ldo:
  
 display:
   - platform: mipi_dsi
+    id: my_display
     model: WAVESHARE-ESP32-P4-WIFI6-TOUCH-LCD-4C
     pixel_mode: 16bit
     color_depth: 16
