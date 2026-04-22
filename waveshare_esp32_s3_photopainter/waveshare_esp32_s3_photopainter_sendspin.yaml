@@ -1,9 +1,9 @@
 substitutions:
-  display_pixel_width: '480'   # Right most visible pixel
-  display_pixel_height: '800'   # bottom most visible pixel -- 
+  display_pixel_width: '800'   # Right most visible pixel
+  display_pixel_height: '480'   # bottom most visible pixel
   display_min_pixel_x: '0'
   display_min_pixel_y: '0'
-  display_rotation: '90°'
+  display_rotation: '270°'
 
 logger:
 ota:
@@ -21,7 +21,8 @@ esphome:
   on_boot:
     priority: 800
     then:
-      - lambda: |- # Turn on the power of the display
+      - lambda: |-
+          // reg 0x95 = LDO_VOL3_CTRL: set ALDO3 voltage to 3300mV (0x1C = 28 → 500 + 28*100)
           id(bus).write(0x34, (uint8_t[]){0x95, 0x1C}, 2);
 
 esp32:
@@ -42,62 +43,22 @@ api:
 
 external_components:
   - source:
-      # https://github.com/esphome/esphome/pull/12429
       type: git
       url: https://github.com/esphome/esphome
-      ref: a6c403deb7603d316dce2820897902e01c3695cc
+      ref: 89dd9fb3173a6ae7d5c730fa671f6089d7c9a2b8
+    components: [const, generic_image, media_source, sendspin]
     refresh: 0s
-    components: [file, http_request, media_source, speaker_source]
-  - source:
-      # https://github.com/esphome/esphome/pull/12284
-      type: git
-      url: https://github.com/esphome/esphome
-      ref: 119a5c25a483c58b3d58a35c8cec95495c6491c2
-    components: [sendspin,generic_image]
-
-  # The following sources are merged into the dev branch of ESPHome, but not yet in a release.
-  # We've pinned them to their specific squash merge commit id for reproducable builds.
-  # These should be available in ESPHome 2026.3.0
-  - source:
-      # Dev commit hash for squash merge from PR#10212
-      type: git
-      url: https://github.com/esphome/esphome
-      ref: 903971de12c1b291ca8cd367ce5cdf9af8b304ae
-    components: [runtime_image]
-  - source:
-      # Dev commit hash for squash merge from PR#12258
-      type: git
-      url: https://github.com/esphome/esphome
-      ref: 264c8faedd0ab956b0437ec2ecc0bacae1708923
-    components: [media_player]
-  - source:
-      # Dev commit hash for squash merge from PR#14013
-      type: git
-      url: https://github.com/esphome/esphome
-      ref: ba7134ee3f870ce00d2990d84b142b734028330f
-    components: [mdns]
-  - source:
-      # Dev commit hash for squash merge from PR#14108
-      type: git
-      url: https://github.com/esphome/esphome
-      ref: d2026b4cd74bbeb9b86941bf1887f3d93d639387
-    components: [audio]
 
 sendspin:
   id: sendspin_hub
   task_stack_in_psram: true
 
-media_player:
-  - platform: sendspin
-    id: sendspin_media_player
-    name: Sendspin Player
-
 generic_image:
   - platform: sendspin
     id: sendspin_cover_art
-    format: jpg
-    type: rgb
-    resize: ${display_pixel_width}x${display_pixel_height}
+    format: png
+    type: rgb565
+    resize: ${display_pixel_height}x${display_pixel_width}
     image_source: ALBUM
     on_image_decoded:
       - lambda: |-
@@ -108,6 +69,20 @@ generic_image:
       - lambda: |-
           ESP_LOGE("sendspin", "Failed to decode cover art image");
           id(image_downloading_events).trigger("image_downloading_failed");
+
+number:
+  - platform: template
+    id: sleep_duration
+    name: Sleep Duration
+    max_value: 3600
+    min_value: 30
+    step: 30
+    device_class: duration
+    unit_of_measurement: seconds
+    entity_category: config
+    optimistic: True
+    initial_value: 360
+    restore_value: True
 
 # event configuration
 event:
@@ -125,41 +100,44 @@ event:
       - image_downloading_complete
       - image_downloading_failed
 
-switch:
-  - platform: template
-    name: "Download and render on startup"
-    id: auto_load_render
-    icon: "mdi:cloud-download-outline"
-    restore_mode: RESTORE_DEFAULT_ON
-    optimistic: true
-
-button:
-  - platform: template
-    name: "Render"
-    entity_category: diagnostic
-    on_press:
-      - lambda: |-
-          id(my_display).update();
-
 i2c:
   id: bus
   sda: GPIO47
   scl: GPIO48
   scan: true
+  frequency: 100khz
+
+binary_sensor:
+
+## Set up I2C device for axp2101
+i2c_device:
+   id: i2cdev
+   address: 0x34
 
 sensor:
   - platform: shtcx
     temperature:
       id: temperature
+      name: temperature
       unit_of_measurement: "°C"
       device_class: temperature
       state_class: measurement
       accuracy_decimals: 1
     humidity:
       id: humidity
+      name: humidity
       unit_of_measurement: "%"
       device_class: humidity
       state_class: measurement
+  - platform: template
+    name: Battery Percent
+    device_class: battery
+    unit_of_measurement: "%"
+    update_interval: 60s
+    lambda: |-
+      uint8_t data;
+      id(i2cdev).read_register(0xa4,&data,1);
+      return data;
 
 spi:
   clk_pin: GPIO10
@@ -168,9 +146,12 @@ spi:
 display:
   - platform: epaper_spi
     id: my_display
-    model: 7.3in-spectra-e6
+    model: Spectra-E6
     cs_pin: GPIO9
     dc_pin: GPIO8
+    dimensions:
+      width: $display_pixel_width
+      height: $display_pixel_height
     busy_pin: 
       number: GPIO13
       inverted: true
@@ -180,29 +161,12 @@ display:
     reset_pin: 
       number: GPIO12
     update_interval: never
-    rotation: 270°
-    # show_test_card: true
+    rotation: $display_rotation
     lambda: |-
-      static const char *TAG = "${TAG} - Rendering cycle";
-
-      ESP_LOGW(TAG, "Rendering...");
-
       it.fill(COLOR_OFF);
+      
       if(id(wifi_id).is_connected()) {
-        // Fullscreen sendspin cover art image
         it.image(${display_min_pixel_x}, ${display_min_pixel_y}, id(sendspin_cover_art), COLOR_OFF, COLOR_ON);
-      } else { 
-        ESP_LOGW(TAG, "Wifi not connected. Using offline image");
-        // Centered offline placeholder
-        int mid_x = $display_min_pixel_x + $display_pixel_width / 2;
-        int mid_y = $display_min_pixel_y + $display_pixel_height / 2;
-        it.circle(mid_x, mid_y, 10);
       }
 
-      ESP_LOGW(TAG, "Rendering done");
       id(rendering_events).trigger("render_complete");
-
-font:
-  - file: "gfonts://Roboto"
-    id: roboto_20
-    size: 20
