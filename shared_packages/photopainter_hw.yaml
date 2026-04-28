@@ -1,3 +1,11 @@
+esphome:
+  on_boot:
+    priority: 800
+    then:
+      - lambda: |-
+          // reg 0x95 = LDO_VOL3_CTRL: set ALDO3 voltage to 3300mV (0x1C = 28 → 500 + 28*100)
+          id(bus).write(0x34, (uint8_t[]){0x95, 0x1C}, 2);
+
 i2c:
   id: bus
   sda: GPIO47
@@ -5,6 +13,36 @@ i2c:
   scan: true
   frequency: 100kHz
 
+i2c_device:
+  id: i2cdev
+  address: 0x34
+
 spi:
   clk_pin: GPIO10
   mosi_pin: GPIO11
+
+sensor:
+  - platform: shtcx
+    update_interval: 60s
+    temperature:
+      id: temperature
+      name: Temperature
+      unit_of_measurement: "°C"
+      device_class: temperature
+      state_class: measurement
+      accuracy_decimals: 1
+    humidity:
+      id: humidity
+      name: Humidity
+      unit_of_measurement: "%"
+      device_class: humidity
+      state_class: measurement
+  - platform: template
+    name: Battery Percent
+    device_class: battery
+    unit_of_measurement: "%"
+    update_interval: 60s
+    lambda: |-
+      uint8_t data;
+      id(i2cdev).read_register(0xa4,&data,1);
+      return data;

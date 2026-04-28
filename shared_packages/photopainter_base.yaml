@@ -21,3 +21,24 @@ esp32:
 
 psram:
   mode: octal
+
+api:
+
+number:
+  - platform: template
+    id: sleep_duration
+    name: Sleep Duration
+    max_value: 3600
+    min_value: 30
+    step: 30
+    device_class: duration
+    unit_of_measurement: seconds
+    entity_category: config
+    optimistic: True
+    initial_value: 360
+    restore_value: True
+
+button:
+  - platform: restart
+    name: "Restart"
+    entity_category: "diagnostic"
