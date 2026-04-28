@@ -1,26 +1,23 @@
- substitutions:
+substitutions:
   name: "vantreeseba-smart-speaker"
   friendly_name: "Smart Speaker"
-  
   # Config
   i2c_freq: 400khz
-
   # PINS
   uart_tx_pin: GPIO17
   uart_rx_pin: GPIO18
-
   i2c_sda_pin: GPIO21
   i2c_scl_pin: GPIO20
-
   rmt_rgb_pin: GPIO19
-
   i2s_out_data_pin: GPIO07
   i2s_out_lrclk_pin: GPIO15
   i2s_out_bclk_pin: GPIO16
-
   i2s_in_lrclk_pin: GPIO9
   i2s_in_bclk_pin: GPIO10
   i2s_in_data_pin: GPIO12
+
+packages:
+  roboto_fonts: !include ../shared_packages/roboto_fonts_16_32.yaml
 
 external_components:
   - source: github://pr#5674
@@ -245,15 +242,6 @@ voice_assistant:
       
 
 #### OLED DISPLAY
-font:
-  # gfonts://family[@weight]
-  - file: "gfonts://Roboto"
-    id: roboto_16
-    size: 16
-  - file: "gfonts://Roboto"
-    id: roboto_32
-    size: 32
-
 ### Display / I2C
 ## BUSSES
 i2c:
