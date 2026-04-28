@@ -1,19 +1,13 @@
 substitutions:
   display_pixel_width: '800'   # Right most visible pixel
-  display_pixel_height: '480'   # bottom most visible pixel
+  display_pixel_height: '480'  # bottom most visible pixel
   display_min_pixel_x: '0'
   display_min_pixel_y: '0'
   display_rotation: '270°'
 
-logger:
-ota:
-  - platform: esphome
-
-wifi:
-  id: wifi_id
-  ssid: !secret wifi_ssid
-  password: !secret wifi_password
-  fast_connect: True
+packages:
+  base: !include ../shared_packages/photopainter_base.yaml
+  hw: !include ../shared_packages/photopainter_hw.yaml
 
 esphome:
   name: photo-frame-1
@@ -24,15 +18,6 @@ esphome:
       - lambda: |-
           // reg 0x95 = LDO_VOL3_CTRL: set ALDO3 voltage to 3300mV (0x1C = 28 → 500 + 28*100)
           id(bus).write(0x34, (uint8_t[]){0x95, 0x1C}, 2);
-
-esp32:
-  board: esp32-s3-devkitc-1
-  flash_size: 16MB
-  framework:
-    type: esp-idf
-
-psram:
-  mode: octal
 
 api:
   actions:
@@ -100,19 +85,10 @@ event:
       - image_downloading_complete
       - image_downloading_failed
 
-i2c:
-  id: bus
-  sda: GPIO47
-  scl: GPIO48
-  scan: true
-  frequency: 100khz
-
-binary_sensor:
-
 ## Set up I2C device for axp2101
 i2c_device:
-   id: i2cdev
-   address: 0x34
+  id: i2cdev
+  address: 0x34
 
 sensor:
   - platform: shtcx
@@ -139,10 +115,6 @@ sensor:
       id(i2cdev).read_register(0xa4,&data,1);
       return data;
 
-spi:
-  clk_pin: GPIO10
-  mosi_pin: GPIO11
-
 display:
   - platform: epaper_spi
     id: my_display
@@ -152,19 +124,19 @@ display:
     dimensions:
       width: $display_pixel_width
       height: $display_pixel_height
-    busy_pin: 
+    busy_pin:
       number: GPIO13
       inverted: true
       mode:
         input: true
         pullup: true
-    reset_pin: 
+    reset_pin:
       number: GPIO12
     update_interval: never
     rotation: $display_rotation
     lambda: |-
       it.fill(COLOR_OFF);
-      
+
       if(id(wifi_id).is_connected()) {
         it.image(${display_min_pixel_x}, ${display_min_pixel_y}, id(sendspin_cover_art), COLOR_OFF, COLOR_ON);
       }

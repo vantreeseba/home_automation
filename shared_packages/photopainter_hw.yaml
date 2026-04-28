@@ -1,0 +1,10 @@
+i2c:
+  id: bus
+  sda: GPIO47
+  scl: GPIO48
+  scan: true
+  frequency: 100kHz
+
+spi:
+  clk_pin: GPIO10
+  mosi_pin: GPIO11
