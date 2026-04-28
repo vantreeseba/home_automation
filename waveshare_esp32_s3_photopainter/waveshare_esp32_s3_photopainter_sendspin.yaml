@@ -1,4 +1,6 @@
 substitutions:
+  device_name: photo-frame-1
+  device_friendly_name: Photo Frame 1
   display_pixel_width: '800'   # Right most visible pixel
   display_pixel_height: '480'  # bottom most visible pixel
   display_min_pixel_x: '0'
@@ -8,10 +10,9 @@ substitutions:
 packages:
   base: !include ../shared_packages/photopainter_base.yaml
   hw: !include ../shared_packages/photopainter_hw.yaml
+  shtcx: !include ../shared_packages/shtcx_sensor.yaml
 
 esphome:
-  name: photo-frame-1
-  friendly_name: Photo Frame 1
   on_boot:
     priority: 800
     then:
@@ -91,20 +92,6 @@ i2c_device:
   address: 0x34
 
 sensor:
-  - platform: shtcx
-    temperature:
-      id: temperature
-      name: temperature
-      unit_of_measurement: "°C"
-      device_class: temperature
-      state_class: measurement
-      accuracy_decimals: 1
-    humidity:
-      id: humidity
-      name: humidity
-      unit_of_measurement: "%"
-      device_class: humidity
-      state_class: measurement
   - platform: template
     name: Battery Percent
     device_class: battery

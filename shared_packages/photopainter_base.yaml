@@ -1,3 +1,7 @@
+esphome:
+  name: ${device_name}
+  friendly_name: ${device_friendly_name}
+
 logger:
 
 ota:

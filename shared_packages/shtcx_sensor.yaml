@@ -1,0 +1,13 @@
+sensor:
+  - platform: shtcx
+    temperature:
+      id: temperature
+      unit_of_measurement: "°C"
+      device_class: temperature
+      state_class: measurement
+      accuracy_decimals: 1
+    humidity:
+      id: humidity
+      unit_of_measurement: "%"
+      device_class: humidity
+      state_class: measurement
