@@ -1,4 +1,4 @@
-alias: Announce Calender
+alias: Announce Calendar
 fields:
   tts_target:
     required: true
