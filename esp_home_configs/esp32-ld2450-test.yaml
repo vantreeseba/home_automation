@@ -1,3 +1,15 @@
+# ARCHIVED — this was an early ld2450 prototype and will not compile as-is.
+#
+# Issues:
+#   1. Uses 'external_components: source: local: path: ./components' but
+#      that directory does not exist; the ld2450 component is now in
+#      ESPHome mainline (see smart_speaker_pe_components.yaml for current usage).
+#   2. Sensor keys (target_1_x, target_1_y, target_1_res) are from the old
+#      pre-merge API; current API uses target_1: {x:, y:, speed:, ...}.
+#   3. Uses 'type: arduino' framework; all other ESP32 devices use esp-idf.
+#
+# Keep for historical reference; do not flash.
+
 esphome:
   name: esp32-ld2450
   friendly_name: esp32-ld2450
@@ -11,24 +23,26 @@ esp32:
 external_components:
   - source:
       type: local
-      path: ./components
+      path: ./components  # does not exist
 
 logger:
   level: VERBOSE
-  
+
 api:
+
 ota:
+  - platform: esphome
+
 wifi:
   ssid: !secret wifi_ssid
   password: !secret wifi_password
   use_address: esp32-ld2450.lan
   fast_connect: True
 
-# Example configuration entry
 uart:
   id: uart_bus
-  tx_pin: GPIO25 #TX
-  rx_pin: GPIO27 #RX
+  tx_pin: GPIO25
+  rx_pin: GPIO27
   baud_rate: 256000
   parity: NONE
   stop_bits: 1
