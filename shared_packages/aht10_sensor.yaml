@@ -1,0 +1,11 @@
+sensor:
+  - platform: aht10
+    temperature:
+      id: aht10_temp
+      name: "${friendly_name} Temperature"
+      filters:
+        - offset: ${temperature_offset}
+    humidity:
+      id: aht10_humidity
+      name: "${friendly_name} Humidity"
+    update_interval: 30s
