@@ -1,3 +1,12 @@
+substitutions:
+  mic_din_pin: GPIO11
+  speaker_dout_pin: GPIO9
+  amp_switch_pin: GPIO53
+
+packages:
+  codecs: !include ../shared_packages/es8311_es7210_audio.yaml
+  mixer_resampler: !include ../shared_packages/mixer_resampler_speakers.yaml
+
 esp32_hosted:
   id: hosted_esp_wifi
   active_high: true
@@ -9,90 +18,19 @@ esp32_hosted:
   d1_pin: GPIO15
   d2_pin: GPIO16
   d3_pin: GPIO17
- 
+
 i2c:
   sda: GPIO7
   scl: GPIO8
   scan: true
   frequency: 400kHz
   id: i2c_bus
- 
+
 i2s_audio:
   - id: i2s_bus
     i2s_mclk_pin: GPIO13
     i2s_lrclk_pin: GPIO10
     i2s_bclk_pin: GPIO12
- 
-audio_dac:
-  - platform: es8311
-    id: es8311_dac
-    i2c_id: i2c_bus
-    address: 0x18
-    bits_per_sample: 16bit
-    sample_rate: 48000
-
-audio_adc:
-  - platform: es7210
-    id: es7210_adc
-    bits_per_sample: 16bit
-    sample_rate: 48000
-    i2c_id: i2c_bus
-
-microphone:
-  - platform: i2s_audio
-    id: esp32_microphone
-    i2s_audio_id: i2s_bus
-    i2s_din_pin: GPIO11
-    sample_rate: 48000
-    bits_per_sample: 16bit
-    adc_type: external
-
-  # - platform: resampler
-  #   id: resampler_mic
-  #   microphone: esp32_microphone
-  #   sample_rate: 16000
-  #   bits_per_sample: 16
-    
-
-speaker:
-  - platform: i2s_audio
-    id: esp32_speaker
-    i2s_audio_id: i2s_bus
-    i2s_dout_pin: GPIO9
-    audio_dac: es8311_dac
-    dac_type: external
-    channel: mono
-    buffer_duration: 100ms
-    bits_per_sample: 16bit
-    sample_rate: 48000
- 
-  - platform: mixer
-    id: mixing_speaker
-    output_speaker: esp32_speaker
-    source_speakers:
-      - id: announcement_mixing_input
-        timeout: never
-      - id: media_mixing_input
-        timeout: never
- 
-  - platform: resampler
-    id: announcement_resampling_speaker
-    output_speaker: announcement_mixing_input
-    sample_rate: 48000
-    bits_per_sample: 16
- 
-  - platform: resampler
-    id: media_resampling_speaker
-    output_speaker: media_mixing_input
-    sample_rate: 48000
-    bits_per_sample: 16
- 
-switch:
-  - platform: gpio
-    pin: GPIO53  # BSP_POWER_AMP_IO
-    name: "Audio Amplifier"
-    id: audio_amplifier
-    restore_mode: ALWAYS_OFF
 
 touchscreen:
   - platform: gt911
@@ -107,19 +45,19 @@ output:
     inverted: true
     # min_power: 0.1 # To prevent the backlight from being too dim
     max_power: 0.8 # To prevent overheating due to excessive lighting
-    
+
 light:
   - platform: monochromatic
     name: "backlight"
     output: backlight_
     id: backlight_light
     restore_mode: ALWAYS_ON
- 
+
 ## MIPI DSI CONFIG
 esp_ldo:
   - channel: 3
     voltage: 2.5V
- 
+
 display:
   - platform: mipi_dsi
     id: my_display
