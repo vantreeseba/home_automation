@@ -4,7 +4,7 @@ substitutions:
   temperature_offset: "-3"
   # PINS
   rmt_rgb_pin: GPIO04
-  
+
   i2s_out_lrclk_pin: GPIO25
   i2s_out_bclk_pin: GPIO27
   i2s_dout_pin: GPIO2
@@ -15,10 +15,15 @@ substitutions:
 
   uart_tx_pin: GPIO25
   uart_rx_pin: GPIO27
-  
+
   i2c_sda_pin: GPIO22
-  i2c_scl_pin: GPIO21 
+  i2c_scl_pin: GPIO21
   i2c_freq: 400khz
+
+packages:
+  bh1750: !include ../shared_packages/bh1750_illuminance.yaml
+  aht10: !include ../shared_packages/aht10_sensor.yaml
+  roboto_fonts: !include ../shared_packages/roboto_fonts_16_32.yaml
 
 esphome:
   name: ${name}
@@ -54,6 +59,7 @@ external_components:
 
 logger:
 ota:
+  - platform: esphome
 
 wifi:
   use_address: vantreeseba-multisensor
@@ -267,15 +273,6 @@ light:
           max_brightness: 50%
 
 #### OLED DISPLAY
-font:
-  # gfonts://family[@weight]
-  - file: "gfonts://Roboto"
-    id: roboto_16
-    size: 16
-  - file: "gfonts://Roboto"
-    id: roboto_32
-    size: 32
-
 display:
   - platform: ssd1306_i2c
     model: "SSD1306 128x64"
@@ -316,20 +313,6 @@ display:
       # name: "Baud rate"
 
 sensor:
-  - platform: aht10
-    temperature:
-      id: aht10_temp
-      name: "${friendly_name} Temperature"
-      filters:
-      - offset: ${temperature_offset}
-    humidity:
-      id: aht10_humidity
-      name: "${friendly_name} Humidity"
-    update_interval: 30s
-  - platform: bh1750
-    name: "${friendly_name} Illuminance"
-    address: 0x23
-    update_interval: 5s
   # - platform: ld2450
   #   ld2450_id: ld2450_radar
   #   target_count:
