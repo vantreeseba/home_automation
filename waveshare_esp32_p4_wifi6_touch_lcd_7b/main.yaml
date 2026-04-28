@@ -1,9 +1,12 @@
 substitutions:
+  device_name: waveshare-p4-wifi6-touch-lcd-7b
+  device_friendly_name: Waveshare P4 WiFi6 Touch LCD 7B
   mic_din_pin: GPIO11
   speaker_dout_pin: GPIO9
   amp_switch_pin: GPIO53
 
 packages:
+  base: !include ../shared_packages/waveshare_p4_base.yaml
   codecs: !include ../shared_packages/es8311_es7210_audio.yaml
   mixer_resampler: !include ../shared_packages/mixer_resampler_speakers.yaml
 
