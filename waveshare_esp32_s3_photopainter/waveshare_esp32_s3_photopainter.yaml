@@ -24,3 +24,7 @@ packages:
     url: https://github.com/vantreeseba/home_automation
     ref: main
     file: home_automation/shared_packages/photopainter_sendspin.yaml
+  sleep:
+    url: https://github.com/vantreeseba/home_automation
+    ref: main
+    file: home_automation/shared_packages/photopainter_sleep.yaml

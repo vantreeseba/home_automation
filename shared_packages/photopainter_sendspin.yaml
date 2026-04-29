@@ -28,10 +28,16 @@ generic_image:
           ESP_LOGI("sendspin", "Cover art decoded");
           id(image_downloading_events).trigger("image_downloading_complete");
       - component.update: my_display
+      - deep_sleep.enter:
+          id: deep_sleep_control
+          sleep_duration: !lambda return (uint32_t)(id(sleep_duration).state * 1000);
     on_image_error:
       - lambda: |-
           ESP_LOGE("sendspin", "Failed to decode cover art image");
           id(image_downloading_events).trigger("image_downloading_failed");
+      - deep_sleep.enter:
+          id: deep_sleep_control
+          sleep_duration: !lambda return (uint32_t)(id(sleep_duration).state * 1000);
 
 event:
   - platform: template
