@@ -8,7 +8,19 @@ substitutions:
   display_rotation: '270°'
 
 packages:
-  base: !include ../shared_packages/photopainter_base.yaml
-  hw: !include ../shared_packages/photopainter_hw.yaml
-  display: !include ../shared_packages/photopainter_display.yaml
-  sendspin: !include ../shared_packages/photopainter_sendspin.yaml
+  base:
+    url: https://github.com/vantreeseba/home_automation
+    ref: main
+    file: home_automation/shared_packages/photopainter_base.yaml
+  hw:
+    url: https://github.com/vantreeseba/home_automation
+    ref: main
+    file: home_automation/shared_packages/photopainter_hw.yaml
+  display:
+    url: https://github.com/vantreeseba/home_automation
+    ref: main
+    file: home_automation/shared_packages/photopainter_display.yaml
+  sendspin:
+    url: https://github.com/vantreeseba/home_automation
+    ref: main
+    file: home_automation/shared_packages/photopainter_sendspin.yaml

@@ -21,9 +21,18 @@ substitutions:
   i2c_freq: 400khz
 
 packages:
-  bh1750: !include ../shared_packages/bh1750_illuminance.yaml
-  aht10: !include ../shared_packages/aht10_sensor.yaml
-  roboto_fonts: !include ../shared_packages/roboto_fonts_16_32.yaml
+  bh1750:
+    url: https://github.com/vantreeseba/home_automation
+    ref: main
+    file: home_automation/shared_packages/bh1750_illuminance.yaml
+  aht10:
+    url: https://github.com/vantreeseba/home_automation
+    ref: main
+    file: home_automation/shared_packages/aht10_sensor.yaml
+  roboto_fonts:
+    url: https://github.com/vantreeseba/home_automation
+    ref: main
+    file: home_automation/shared_packages/roboto_fonts_16_32.yaml
 
 esphome:
   name: ${name}

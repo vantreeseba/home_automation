@@ -17,7 +17,10 @@ substitutions:
   i2s_in_data_pin: GPIO12
 
 packages:
-  roboto_fonts: !include ../shared_packages/roboto_fonts_16_32.yaml
+  roboto_fonts:
+    url: https://github.com/vantreeseba/home_automation
+    ref: main
+    file: home_automation/shared_packages/roboto_fonts_16_32.yaml
 
 external_components:
   - source: github://pr#5674

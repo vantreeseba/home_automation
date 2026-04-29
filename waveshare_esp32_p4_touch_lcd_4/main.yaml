@@ -6,9 +6,18 @@ substitutions:
   amp_switch_pin: GPIO53
 
 packages:
-  base: !include ../shared_packages/waveshare_p4_base.yaml
-  codecs: !include ../shared_packages/es8311_es7210_audio.yaml
-  mixer_resampler: !include ../shared_packages/mixer_resampler_speakers.yaml
+  base:
+    url: https://github.com/vantreeseba/home_automation
+    ref: main
+    file: home_automation/shared_packages/waveshare_p4_base.yaml
+  codecs:
+    url: https://github.com/vantreeseba/home_automation
+    ref: main
+    file: home_automation/shared_packages/es8311_es7210_audio.yaml
+  mixer_resampler:
+    url: https://github.com/vantreeseba/home_automation
+    ref: main
+    file: home_automation/shared_packages/mixer_resampler_speakers.yaml
 
 esp32_hosted:
   id: hosted_esp_wifi

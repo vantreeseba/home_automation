@@ -4,8 +4,14 @@ substitutions:
   temperature_offset: "-3"
 
 packages:
-  bh1750: !include ../shared_packages/bh1750_illuminance.yaml
-  aht10: !include ../shared_packages/aht10_sensor.yaml
+  bh1750:
+    url: https://github.com/vantreeseba/home_automation
+    ref: main
+    file: home_automation/shared_packages/bh1750_illuminance.yaml
+  aht10:
+    url: https://github.com/vantreeseba/home_automation
+    ref: main
+    file: home_automation/shared_packages/aht10_sensor.yaml
 
 esphome:
   name: "${name}"
