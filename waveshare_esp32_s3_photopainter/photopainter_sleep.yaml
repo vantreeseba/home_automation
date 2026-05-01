@@ -1,8 +1,0 @@
-deep_sleep:
-  id: deep_sleep_control
-
-esphome:
-  on_boot:
-    priority: 200
-    then:
-      - deep_sleep.prevent: deep_sleep_control

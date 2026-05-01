@@ -7,13 +7,172 @@ substitutions:
   display_min_pixel_y: '0'
   display_rotation: '270°'
 
+external_components:
+  - source:
+      type: git
+      url: https://github.com/esphome/esphome
+      ref: 89dd9fb3173a6ae7d5c730fa671f6089d7c9a2b8
+    components: [const, generic_image, media_source, sendspin]
+    refresh: 0s
+  - source:
+      type: git
+      url: https://github.com/esphome/esphome
+      ref: dev
+    components: [runtime_image]
+    refresh: 0s
+
 packages:
   base:
     url: https://github.com/vantreeseba/home_automation
     ref: main
-    files: 
-      - waveshare_esp32_s3_photopainter/photopainter_base.yaml
-      - waveshare_esp32_s3_photopainter/photopainter_hw.yaml
-      - waveshare_esp32_s3_photopainter/photopainter_display.yaml
-      - waveshare_esp32_s3_photopainter/photopainter_sendspin.yaml
-      - waveshare_esp32_s3_photopainter/photopainter_sleep.yaml
+    files:
+      - shared_packages/photopainter_base.yaml
+
+esphome:
+  on_boot:
+    priority: 200
+    then:
+      - deep_sleep.prevent: deep_sleep_control
+    priority: 800
+    then:
+      - lambda: |-
+          // reg 0x95 = LDO_VOL3_CTRL: set ALDO3 voltage to 3300mV (0x1C = 28 → 500 + 28*100)
+          id(bus).write(0x34, (uint8_t[]){0x95, 0x1C}, 2);
+
+i2c:
+  id: bus
+  sda: GPIO47
+  scl: GPIO48
+  scan: true
+  frequency: 100kHz
+
+i2c_device:
+  id: i2cdev
+  address: 0x34
+
+spi:
+  clk_pin: GPIO10
+  mosi_pin: GPIO11
+
+psram:
+  mode: octal
+    
+api:
+  actions:
+    - action: epaper_render
+      then:
+        - lambda: |-
+            id(my_display).update();
+
+deep_sleep:
+  id: deep_sleep_control
+
+event:
+  - platform: template
+    name: Rendering
+    id: rendering_events
+    icon: "mdi:brush"
+    event_types:
+      - render_complete
+
+sendspin:
+  id: sendspin_hub
+  task_stack_in_psram: true
+
+generic_image:
+  - platform: sendspin
+    id: sendspin_cover_art
+    format: png
+    type: RGB
+    resize: ${display_pixel_height}x${display_pixel_width}
+    image_source: ALBUM
+    on_image_decoded:
+      - lambda: |-
+          ESP_LOGI("sendspin", "Cover art decoded");
+          id(image_downloading_events).trigger("image_downloading_complete");
+      - component.update: my_display
+      - deep_sleep.enter:
+          id: deep_sleep_control
+          sleep_duration: !lambda return (uint32_t)(id(sleep_duration).state * 1000);
+    on_image_error:
+      - lambda: |-
+          ESP_LOGE("sendspin", "Failed to decode cover art image");
+          id(image_downloading_events).trigger("image_downloading_failed");
+      - deep_sleep.enter:
+          id: deep_sleep_control
+          sleep_duration: !lambda return (uint32_t)(id(sleep_duration).state * 1000);
+
+event:
+  - platform: template
+    name: Image Downloading
+    id: image_downloading_events
+    icon: "mdi:download"
+    event_types:
+      - image_downloading_complete
+      - image_downloading_failed
+
+display:
+  - platform: epaper_spi
+    id: my_display
+    model: Spectra-E6
+    cs_pin: GPIO9
+    dc_pin: GPIO8
+    dimensions:
+      width: $display_pixel_width
+      height: $display_pixel_height
+    busy_pin:
+      number: GPIO13
+      inverted: true
+      mode:
+        input: true
+        pullup: true
+    reset_pin:
+      number: GPIO12
+    update_interval: never
+    rotation: $display_rotation
+    lambda: |-
+      if(id(wifi_id).is_connected()) {
+        it.image(0, 0, id(sendspin_cover_art));
+      }
+      id(rendering_events).trigger("render_complete");
+
+sensor:
+  - platform: shtcx
+    update_interval: 60s
+    temperature:
+      id: temperature
+      name: Temperature
+      unit_of_measurement: "°C"
+      device_class: temperature
+      state_class: measurement
+      accuracy_decimals: 1
+    humidity:
+      id: humidity
+      name: Humidity
+      unit_of_measurement: "%"
+      device_class: humidity
+      state_class: measurement
+  - platform: template
+    name: Battery Percent
+    device_class: battery
+    unit_of_measurement: "%"
+    update_interval: 60s
+    lambda: |-
+      uint8_t data;
+      id(i2cdev).read_register(0xa4,&data,1);
+      return data;
+
+
+number:
+  - platform: template
+    id: sleep_duration
+    name: Sleep Duration
+    max_value: 3600
+    min_value: 30
+    step: 30
+    device_class: duration
+    unit_of_measurement: seconds
+    entity_category: config
+    optimistic: True
+    initial_value: 360
+    restore_value: True
