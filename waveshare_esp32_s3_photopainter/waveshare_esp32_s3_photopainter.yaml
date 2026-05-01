@@ -11,20 +11,20 @@ packages:
   base:
     url: https://github.com/vantreeseba/home_automation
     ref: main
-    file: home_automation/shared_packages/photopainter_base.yaml
+    file: home_automation/waveshare_esp32_s3_photopainter/photopainter_base.yaml
   hw:
     url: https://github.com/vantreeseba/home_automation
     ref: main
-    file: home_automation/shared_packages/photopainter_hw.yaml
+    file: home_automation/waveshare_esp32_s3_photopainter/photopainter_hw.yaml
   display:
     url: https://github.com/vantreeseba/home_automation
     ref: main
-    file: home_automation/shared_packages/photopainter_display.yaml
+    file: home_automation/waveshare_esp32_s3_photopainter/photopainter_display.yaml
   sendspin:
     url: https://github.com/vantreeseba/home_automation
     ref: main
-    file: home_automation/shared_packages/photopainter_sendspin.yaml
+    file: home_automation/waveshare_esp32_s3_photopainter/photopainter_sendspin.yaml
   sleep:
     url: https://github.com/vantreeseba/home_automation
     ref: main
-    file: home_automation/shared_packages/photopainter_sleep.yaml
+    file: home_automation/waveshare_esp32_s3_photopainter/photopainter_sleep.yaml
