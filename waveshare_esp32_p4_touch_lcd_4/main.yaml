@@ -9,15 +9,15 @@ packages:
   base:
     url: https://github.com/vantreeseba/home_automation
     ref: main
-    file: home_automation/shared_packages/waveshare_p4_base.yaml
+    file: shared_packages/waveshare_p4_base.yaml
   codecs:
     url: https://github.com/vantreeseba/home_automation
     ref: main
-    file: home_automation/shared_packages/es8311_es7210_audio.yaml
+    file: shared_packages/es8311_es7210_audio.yaml
   mixer_resampler:
     url: https://github.com/vantreeseba/home_automation
     ref: main
-    file: home_automation/shared_packages/mixer_resampler_speakers.yaml
+    file: shared_packages/mixer_resampler_speakers.yaml
 
 esp32_hosted:
   id: hosted_esp_wifi
