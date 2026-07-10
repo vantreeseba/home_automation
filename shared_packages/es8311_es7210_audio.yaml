@@ -29,8 +29,6 @@ speaker:
     i2s_dout_pin: ${speaker_dout_pin}
     audio_dac: es8311_dac
     dac_type: external
-    channel: mono
-    buffer_duration: 100ms
     bits_per_sample: 16bit
     sample_rate: 48000
 
