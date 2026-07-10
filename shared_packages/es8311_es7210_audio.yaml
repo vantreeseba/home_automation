@@ -12,6 +12,7 @@ audio_adc:
     bits_per_sample: 16bit
     sample_rate: 48000
     i2c_id: i2c_bus
+    address: 0x40
 
 microphone:
   - platform: i2s_audio
