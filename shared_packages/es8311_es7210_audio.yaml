@@ -22,6 +22,7 @@ microphone:
     sample_rate: 48000
     bits_per_sample: 16bit
     adc_type: external
+    channel: stereo
 
 speaker:
   - platform: i2s_audio
@@ -32,6 +33,7 @@ speaker:
     dac_type: external
     bits_per_sample: 16bit
     sample_rate: 48000
+    channel: stereo
 
 switch:
   - platform: gpio
