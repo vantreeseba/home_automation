@@ -39,4 +39,4 @@ switch:
     pin: ${amp_switch_pin}
     name: "Audio Amplifier"
     id: audio_amplifier
-    restore_mode: ALWAYS_OFF
+    restore_mode: ALWAYS_ON
