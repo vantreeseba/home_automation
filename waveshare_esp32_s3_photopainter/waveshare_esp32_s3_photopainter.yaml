@@ -3,41 +3,40 @@ substitutions:
   device_friendly_name: Photo Frame 1
   display_pixel_width: '800'
   display_pixel_height: '480'
-  display_min_pixel_x: '0'
-  display_min_pixel_y: '0'
   display_rotation: '270°'
-
-external_components:
-  - source:
-      type: git
-      url: https://github.com/esphome/esphome
-      ref: 89dd9fb3173a6ae7d5c730fa671f6089d7c9a2b8
-    components: [const, generic_image, media_source, sendspin]
-    refresh: 0s
-  - source:
-      type: git
-      url: https://github.com/esphome/esphome
-      ref: dev
-    components: [runtime_image]
-    refresh: 0s
+  # Longest the frame stays awake waiting for an image before it gives up and sleeps anyway.
+  max_awake_time: 60s
 
 packages:
   base:
     url: https://github.com/vantreeseba/home_automation
     ref: main
     files:
-      - shared_packages/photopainter_base.yaml
+      - shared_packages/default_base.yaml
 
 esphome:
+  # First release with the sendspin image platform and no external components needed.
+  min_version: 2026.9.0
   on_boot:
-    priority: 200
-    then:
-      - deep_sleep.prevent: deep_sleep_control
-    priority: 800
-    then:
-      - lambda: |-
-          // reg 0x95 = LDO_VOL3_CTRL: set ALDO3 voltage to 3300mV (0x1C = 28 → 500 + 28*100)
-          id(bus).write(0x34, (uint8_t[]){0x95, 0x1C}, 2);
+    - priority: 800
+      then:
+        - lambda: |-
+            // AXP2101 rails, all 3.3V as in Waveshare's firmware.
+            // DCDC1 (0x82) = 1500mV + n*100mV, ALDO1-4 (0x92-0x95) = 500mV + n*100mV.
+            static const uint8_t RAILS[][2] = {{0x82, 0x12}, {0x92, 0x1C}, {0x93, 0x1C}, {0x94, 0x1C}, {0x95, 0x1C}};
+            for (const auto &rail : RAILS) {
+              uint8_t current;
+              if (!id(pmic).read_byte(rail[0], &current)) {
+                ESP_LOGW("pmic", "Could not read rail register 0x%02X", rail[0]);
+                continue;
+              }
+              if ((current & 0x1F) != rail[1]) {
+                id(pmic).write_byte(rail[0], (current & 0xE0) | rail[1]);
+              }
+            }
+    - priority: -100
+      then:
+        - script.execute: awake_timeout
 
 i2c:
   id: bus
@@ -47,7 +46,7 @@ i2c:
   frequency: 100kHz
 
 i2c_device:
-  id: i2cdev
+  id: pmic
   address: 0x34
 
 spi:
@@ -56,16 +55,64 @@ spi:
 
 psram:
   mode: octal
-    
+
 api:
   actions:
     - action: epaper_render
       then:
-        - lambda: |-
-            id(my_display).update();
+        - component.update: my_display
 
 deep_sleep:
   id: deep_sleep_control
+
+# Wake cycle: boot -> wait for the server to push an image -> refresh the panel -> sleep.
+script:
+  # Nothing arrived in time (server down or no image due), so sleep and try again next cycle.
+  - id: awake_timeout
+    mode: restart
+    then:
+      - delay: ${max_awake_time}
+      - logger.log:
+          level: WARN
+          format: "No image received, going back to sleep"
+      - script.execute: enter_sleep
+  - id: render_and_sleep
+    mode: single
+    then:
+      - script.stop: awake_timeout
+      - component.update: my_display
+      # update only starts the refresh; the display goes idle again once the panel is done.
+      - wait_until:
+          condition:
+            lambda: return id(my_display).is_idle();
+          timeout: 2min
+      - event.trigger:
+          id: rendering_events
+          event_type: render_complete
+      # Give the event and sensor states time to reach Home Assistant.
+      - delay: 2s
+      - script.execute: enter_sleep
+  - id: enter_sleep
+    then:
+      - if:
+          condition:
+            switch.is_off: stay_awake
+          then:
+            - deep_sleep.enter:
+                id: deep_sleep_control
+                sleep_duration: !lambda return (uint32_t) (id(sleep_duration).state * 1000);
+
+switch:
+  # Turn on while the frame is awake to keep it up for OTA updates or debugging.
+  - platform: template
+    id: stay_awake
+    name: Stay Awake
+    icon: "mdi:sleep-off"
+    entity_category: config
+    optimistic: true
+    restore_mode: RESTORE_DEFAULT_OFF
+    on_turn_off:
+      - script.execute: awake_timeout
 
 event:
   - platform: template
@@ -74,35 +121,6 @@ event:
     icon: "mdi:brush"
     event_types:
       - render_complete
-
-sendspin:
-  id: sendspin_hub
-  task_stack_in_psram: true
-
-generic_image:
-  - platform: sendspin
-    id: sendspin_cover_art
-    format: png
-    type: RGB
-    resize: ${display_pixel_height}x${display_pixel_width}
-    image_source: ALBUM
-    on_image_decoded:
-      - lambda: |-
-          ESP_LOGI("sendspin", "Cover art decoded");
-          id(image_downloading_events).trigger("image_downloading_complete");
-      - component.update: my_display
-      - deep_sleep.enter:
-          id: deep_sleep_control
-          sleep_duration: !lambda return (uint32_t)(id(sleep_duration).state * 1000);
-    on_image_error:
-      - lambda: |-
-          ESP_LOGE("sendspin", "Failed to decode cover art image");
-          id(image_downloading_events).trigger("image_downloading_failed");
-      - deep_sleep.enter:
-          id: deep_sleep_control
-          sleep_duration: !lambda return (uint32_t)(id(sleep_duration).state * 1000);
-
-event:
   - platform: template
     name: Image Downloading
     id: image_downloading_events
@@ -111,6 +129,37 @@ event:
       - image_downloading_complete
       - image_downloading_failed
 
+sendspin:
+  id: sendspin_hub
+  task_stack_in_psram: true
+
+image:
+  - platform: sendspin
+    id: sendspin_artwork
+    sendspin_id: sendspin_hub
+    format: PNG
+    type: RGB
+    resize: ${display_pixel_height}x${display_pixel_width}
+    source: ALBUM
+    current_image:
+      id: sendspin_cover_art
+    on_image_display:
+      - logger.log: "Cover art received"
+      - event.trigger:
+          id: image_downloading_events
+          event_type: image_downloading_complete
+      - script.execute: render_and_sleep
+    on_image_error:
+      - logger.log:
+          level: ERROR
+          format: "Failed to decode cover art image"
+      - event.trigger:
+          id: image_downloading_events
+          event_type: image_downloading_failed
+      - script.stop: awake_timeout
+      - delay: 2s
+      - script.execute: enter_sleep
+
 display:
   - platform: epaper_spi
     id: my_display
@@ -118,8 +167,8 @@ display:
     cs_pin: GPIO9
     dc_pin: GPIO8
     dimensions:
-      width: $display_pixel_width
-      height: $display_pixel_height
+      width: ${display_pixel_width}
+      height: ${display_pixel_height}
     busy_pin:
       number: GPIO13
       inverted: true
@@ -129,16 +178,14 @@ display:
     reset_pin:
       number: GPIO12
     update_interval: never
-    rotation: $display_rotation
+    rotation: ${display_rotation}
     lambda: |-
-      if(id(wifi_id).is_connected()) {
-        it.image(0, 0, id(sendspin_cover_art));
-      }
-      id(rendering_events).trigger("render_complete");
+      it.image(0, 0, id(sendspin_cover_art));
 
 sensor:
+  # Short intervals so every wake cycle reports at least once before sleeping.
   - platform: shtcx
-    update_interval: 60s
+    update_interval: 15s
     temperature:
       id: temperature
       name: Temperature
@@ -155,13 +202,17 @@ sensor:
   - platform: template
     name: Battery Percent
     device_class: battery
+    state_class: measurement
     unit_of_measurement: "%"
-    update_interval: 60s
+    accuracy_decimals: 0
+    update_interval: 15s
     lambda: |-
-      uint8_t data;
-      id(i2cdev).read_register(0xa4,&data,1);
-      return data;
-
+      // AXP2101 reg 0xA4 = battery percentage
+      uint8_t percent;
+      if (!id(pmic).read_byte(0xA4, &percent)) {
+        return {};
+      }
+      return percent;
 
 number:
   - platform: template
@@ -171,8 +222,8 @@ number:
     min_value: 30
     step: 30
     device_class: duration
-    unit_of_measurement: seconds
+    unit_of_measurement: s
     entity_category: config
-    optimistic: True
+    optimistic: true
     initial_value: 360
-    restore_value: True
+    restore_value: true
