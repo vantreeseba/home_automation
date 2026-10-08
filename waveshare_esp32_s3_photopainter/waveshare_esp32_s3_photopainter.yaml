@@ -6,6 +6,9 @@ substitutions:
   display_rotation: '270°'
   # Longest the frame stays awake waiting for an image before it gives up and sleeps anyway.
   max_awake_time: 60s
+  # Below this charge the frame stops refreshing and only wakes now and then to check again.
+  low_battery_percent: '10'
+  low_battery_sleep: 12h
 
 packages:
   base:
@@ -34,15 +37,24 @@ esphome:
                 id(pmic).write_byte(rail[0], (current & 0xE0) | rail[1]);
               }
             }
+            // Battery voltage ADC channel (0x30 bit 0), read by the Battery Voltage sensor.
+            uint8_t adc;
+            if (id(pmic).read_byte(0x30, &adc) && !(adc & 0x01)) {
+              id(pmic).write_byte(0x30, adc | 0x01);
+            }
+            // TODO: the audio codec, amplifier and SD slot are never used here but stay
+            // powered through sleep. Switching their rails off could cut sleep current, but
+            // which rail feeds what is not known (Waveshare's firmware leaves them all on),
+            // so measure with a meter and check the schematic before turning any off.
     - priority: -100
       then:
-        - script.execute: awake_timeout
+        - script.execute: start_cycle
 
 i2c:
   id: bus
   sda: GPIO47
   scl: GPIO48
-  scan: true
+  scan: false
   frequency: 100kHz
 
 i2c_device:
@@ -64,9 +76,56 @@ api:
 
 deep_sleep:
   id: deep_sleep_control
+  # KEY button: press to wake the frame early and get the next image.
+  wakeup_pin:
+    number: GPIO4
+    inverted: true
+    mode:
+      input: true
+      pullup: true
 
 # Wake cycle: boot -> wait for the server to push an image -> refresh the panel -> sleep.
 script:
+  - id: start_cycle
+    then:
+      - if:
+          condition:
+            lambda: |-
+              // AXP2101 reg 0x00: bit 5 = USB power present, bit 3 = battery connected.
+              uint8_t status, percent;
+              if (!id(pmic).read_byte(0x00, &status) || !id(pmic).read_byte(0xA4, &percent)) {
+                return false;
+              }
+              return (status & 0x08) && !(status & 0x20) && percent < ${low_battery_percent};
+          then:
+            - logger.log:
+                level: WARN
+                format: "Battery low, sleeping without refreshing"
+            - deep_sleep.enter:
+                id: deep_sleep_control
+                sleep_duration: ${low_battery_sleep}
+          else:
+            - script.execute: awake_timeout
+            - script.execute: connect_to_server
+  # Dial the server set in Server URL instead of waiting for it to find the frame over mDNS.
+  - id: connect_to_server
+    mode: restart
+    then:
+      - wait_until:
+          condition:
+            and:
+              - wifi.connected:
+              - lambda: return id(sendspin_hub).is_ready();
+      - lambda: |-
+          const std::string &url = id(server_url).state;
+          if (url.empty()) {
+            return;
+          }
+          if (url.rfind("ws://", 0) != 0) {
+            ESP_LOGW("sendspin", "Server URL must start with ws://, ignoring '%s'", url.c_str());
+            return;
+          }
+          id(sendspin_hub).connect_to_server(url);
   # Nothing arrived in time (server down or no image due), so sleep and try again next cycle.
   - id: awake_timeout
     mode: restart
@@ -89,15 +148,23 @@ script:
       - event.trigger:
           id: rendering_events
           event_type: render_complete
-      # Give the event and sensor states time to reach Home Assistant.
-      - delay: 2s
       - script.execute: enter_sleep
+  # Sleeps unless Stay Awake is on or the frame is on USB power.
   - id: enter_sleep
     then:
       - if:
           condition:
-            switch.is_off: stay_awake
+            and:
+              - switch.is_off: stay_awake
+              - lambda: |-
+                  uint8_t status;
+                  return !id(pmic).read_byte(0x00, &status) || !(status & 0x20);
           then:
+            - sensor.template.publish:
+                id: awake_time
+                state: !lambda return millis() / 1000.0f;
+            # Give the events and sensor states time to reach Home Assistant.
+            - delay: 2s
             - deep_sleep.enter:
                 id: deep_sleep_control
                 sleep_duration: !lambda return (uint32_t) (id(sleep_duration).state * 1000);
@@ -113,6 +180,60 @@ switch:
     restore_mode: RESTORE_DEFAULT_OFF
     on_turn_off:
       - script.execute: awake_timeout
+
+text:
+  # ws://<server>:8927/sendspin. Leave empty to let the server find the frame over mDNS.
+  - platform: template
+    id: server_url
+    name: Server URL
+    icon: "mdi:server-network"
+    entity_category: config
+    mode: text
+    optimistic: true
+    restore_value: true
+    on_value:
+      - script.execute: connect_to_server
+
+binary_sensor:
+  # While on USB power the frame stays awake, so it can be updated over the air.
+  - platform: template
+    id: usb_power
+    name: USB Power
+    device_class: plug
+    entity_category: diagnostic
+    on_release:
+      # Unplugged: go back to the normal cycle, unless a refresh is already on its way to sleep.
+      - if:
+          condition:
+            not:
+              script.is_running: render_and_sleep
+          then:
+            - script.execute: awake_timeout
+
+text_sensor:
+  - platform: template
+    id: charging_state
+    name: Charging State
+    icon: "mdi:battery-charging"
+    entity_category: diagnostic
+
+interval:
+  - interval: 5s
+    then:
+      - lambda: |-
+          // AXP2101 reg 0x00 bit 5 = USB power present, reg 0x01 bits 2:0 = charger state.
+          uint8_t status, charger;
+          if (!id(pmic).read_byte(0x00, &status) || !id(pmic).read_byte(0x01, &charger)) {
+            return;
+          }
+          id(usb_power).publish_state(status & 0x20);
+          static const char *const STATES[] = {"Trickle", "Precharge", "Constant current",
+                                               "Constant voltage", "Done", "Not charging"};
+          charger &= 0x07;
+          const char *state = charger < 6 ? STATES[charger] : "Unknown";
+          if (id(charging_state).state != state) {
+            id(charging_state).publish_state(state);
+          }
 
 event:
   - platform: template
@@ -157,7 +278,6 @@ image:
           id: image_downloading_events
           event_type: image_downloading_failed
       - script.stop: awake_timeout
-      - delay: 2s
       - script.execute: enter_sleep
 
 display:
@@ -213,17 +333,46 @@ sensor:
         return {};
       }
       return percent;
+  - platform: template
+    name: Battery Voltage
+    device_class: voltage
+    state_class: measurement
+    unit_of_measurement: V
+    accuracy_decimals: 2
+    entity_category: diagnostic
+    update_interval: 15s
+    lambda: |-
+      // AXP2101 regs 0x34/0x35 = battery voltage in mV (upper 5 bits, lower 8 bits)
+      uint8_t high, low;
+      if (!id(pmic).read_byte(0x34, &high) || !id(pmic).read_byte(0x35, &low)) {
+        return {};
+      }
+      return (((high & 0x1F) << 8) | low) / 1000.0f;
+  - platform: wifi_signal
+    name: WiFi Signal
+    update_interval: 15s
+  # How long the frame was up this cycle, published just before it sleeps.
+  - platform: template
+    id: awake_time
+    name: Awake Time
+    device_class: duration
+    state_class: measurement
+    unit_of_measurement: s
+    accuracy_decimals: 1
+    entity_category: diagnostic
+    update_interval: never
 
 number:
   - platform: template
     id: sleep_duration
     name: Sleep Duration
-    max_value: 3600
+    max_value: 86400
     min_value: 30
     step: 30
+    mode: box
     device_class: duration
     unit_of_measurement: s
     entity_category: config
     optimistic: true
-    initial_value: 360
+    initial_value: 3600
     restore_value: true
