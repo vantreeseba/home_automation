@@ -6,8 +6,9 @@ substitutions:
   display_rotation: '270°'
   # Longest the frame stays awake waiting for an image before it gives up and sleeps anyway.
   max_awake_time: 60s
-  # Extra time awake after a refresh, so the panel has fully settled before it sleeps.
-  post_render_delay: 30s
+  # Extra time awake after a refresh. Not needed normally: the frame already waits for the
+  # panel to report the refresh finished before it sleeps.
+  post_render_delay: 0s
   # Below this charge the frame stops refreshing and only wakes now and then to check again.
   low_battery_percent: '10'
   low_battery_sleep: 12h
