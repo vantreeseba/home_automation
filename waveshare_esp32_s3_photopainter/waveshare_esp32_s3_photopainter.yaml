@@ -51,7 +51,9 @@ esphome:
             // ALDO3 and ALDO4 enables (0x90 bits 2 and 3). The PMIC keeps its settings while
             // the ESP32 sleeps, so they are still off here if rails_off_in_sleep cut them.
             uint8_t ldo;
-            if (id(pmic).read_byte(0x90, &ldo) && (ldo & 0x0C) != 0x0C) {
+            if (!id(pmic).read_byte(0x90, &ldo)) {
+              ESP_LOGW("pmic", "Could not read the LDO enables, audio and panel rails may be off");
+            } else if ((ldo & 0x0C) != 0x0C) {
               id(pmic).write_byte(0x90, ldo | 0x0C);
             }
             // Battery voltage ADC channel (0x30 bit 0), read by the Battery Voltage sensor.
@@ -93,6 +95,11 @@ i2c_device:
 spi:
   clk_pin: GPIO10
   mosi_pin: GPIO11
+
+# The PNG decode runs for several seconds on the loop task's core and holds off its watchdog
+# feed, so the default 5s is too short for a full-size image.
+esp32:
+  watchdog_timeout: 30s
 
 psram:
   mode: octal
