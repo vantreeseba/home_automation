@@ -117,13 +117,8 @@ api:
 
 deep_sleep:
   id: deep_sleep_control
-  # KEY button: press to wake the frame early and get the next image.
-  wakeup_pin:
-    number: GPIO4
-    inverted: true
-    mode:
-      input: true
-      pullup: true
+  # Timer wake only. The KEY button (GPIO4, active low) is not a wake source: the frame was
+  # waking seconds into a sleep, and that pin reading low while asleep is the suspect.
 
 # Wake cycle: boot -> wait for the server to push an image -> refresh the panel -> sleep.
 script:
@@ -271,8 +266,8 @@ text_sensor:
     name: Charging State
     icon: "mdi:battery-charging"
     entity_category: diagnostic
-  # What ended the last sleep. Anything but Timer or Button means the frame did not sleep
-  # normally: a reset reads as its reset reason instead.
+  # What ended the last sleep. Anything but Timer means the frame did not sleep normally: a
+  # reset reads as its reset reason instead.
   - platform: template
     id: wake_reason
     name: Wake Reason
@@ -283,8 +278,6 @@ text_sensor:
       switch (esp_sleep_get_wakeup_cause()) {
         case ESP_SLEEP_WAKEUP_TIMER:
           return {"Timer"};
-        case ESP_SLEEP_WAKEUP_EXT0:
-          return {"Button"};
         default:
           break;
       }
