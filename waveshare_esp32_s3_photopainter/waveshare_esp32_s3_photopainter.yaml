@@ -113,6 +113,7 @@ api:
   on_client_connected:
     - component.update: climate
     - component.update: wifi_signal_sensor
+    - component.update: wake_reason
 
 deep_sleep:
   id: deep_sleep_control
@@ -270,6 +271,39 @@ text_sensor:
     name: Charging State
     icon: "mdi:battery-charging"
     entity_category: diagnostic
+  # What ended the last sleep. Anything but Timer or Button means the frame did not sleep
+  # normally: a reset reads as its reset reason instead.
+  - platform: template
+    id: wake_reason
+    name: Wake Reason
+    icon: "mdi:alarm"
+    entity_category: diagnostic
+    update_interval: never
+    lambda: |-
+      switch (esp_sleep_get_wakeup_cause()) {
+        case ESP_SLEEP_WAKEUP_TIMER:
+          return {"Timer"};
+        case ESP_SLEEP_WAKEUP_EXT0:
+          return {"Button"};
+        default:
+          break;
+      }
+      switch (esp_reset_reason()) {
+        case ESP_RST_POWERON:
+          return {"Power on"};
+        case ESP_RST_SW:
+          return {"Restart"};
+        case ESP_RST_PANIC:
+          return {"Crash"};
+        case ESP_RST_TASK_WDT:
+        case ESP_RST_INT_WDT:
+        case ESP_RST_WDT:
+          return {"Watchdog"};
+        case ESP_RST_BROWNOUT:
+          return {"Brownout"};
+        default:
+          return {"Other reset (" + to_string((int) esp_reset_reason()) + ")"};
+      }
 
 interval:
   - interval: 5s
