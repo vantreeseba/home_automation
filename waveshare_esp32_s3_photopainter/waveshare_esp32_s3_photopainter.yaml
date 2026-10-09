@@ -102,6 +102,10 @@ api:
     - action: epaper_render
       then:
         - component.update: my_display
+  # Read the climate and WiFi sensors once per wake, as soon as Home Assistant is listening.
+  on_client_connected:
+    - component.update: climate
+    - component.update: wifi_signal_sensor
 
 deep_sleep:
   id: deep_sleep_control
@@ -346,9 +350,10 @@ display:
       it.image(0, 0, id(sendspin_cover_art));
 
 sensor:
-  # Short intervals so every wake cycle reports at least once before sleeping.
+  # Never polled: api on_client_connected reads these once per wake.
   - platform: shtcx
-    update_interval: 60s
+    id: climate
+    update_interval: never
     temperature:
       id: temperature
       name: Temperature
@@ -362,6 +367,7 @@ sensor:
       unit_of_measurement: "%"
       device_class: humidity
       state_class: measurement
+  # Short intervals so every wake cycle reports at least once before sleeping.
   - platform: template
     name: Battery Percent
     device_class: battery
@@ -392,8 +398,9 @@ sensor:
       }
       return (((high & 0x1F) << 8) | low) / 1000.0f;
   - platform: wifi_signal
+    id: wifi_signal_sensor
     name: WiFi Signal
-    update_interval: 60s
+    update_interval: never
   # How long the frame was up this cycle, published just before it sleeps.
   - platform: template
     id: awake_time
