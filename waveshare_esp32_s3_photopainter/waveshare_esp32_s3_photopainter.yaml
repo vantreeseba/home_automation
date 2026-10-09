@@ -6,9 +6,14 @@ substitutions:
   display_rotation: '270°'
   # Longest the frame stays awake waiting for an image before it gives up and sleeps anyway.
   max_awake_time: 60s
+  # Extra time awake after a refresh, so the panel has fully settled before it sleeps.
+  post_render_delay: 30s
   # Below this charge the frame stops refreshing and only wakes now and then to check again.
   low_battery_percent: '10'
   low_battery_sleep: 12h
+  # Cut power to the audio chips and the e-paper panel while asleep. Untested: measure the
+  # sleep current before leaving it on, see the notes in the on_boot PMIC lambda.
+  rails_off_in_sleep: 'false'
 
 packages:
   base:
@@ -42,20 +47,25 @@ esphome:
                 id(pmic).write_byte(rail[0], (current & 0xE0) | rail[1]);
               }
             }
+            // ALDO3 and ALDO4 enables (0x90 bits 2 and 3). The PMIC keeps its settings while
+            // the ESP32 sleeps, so they are still off here if rails_off_in_sleep cut them.
+            uint8_t ldo;
+            if (id(pmic).read_byte(0x90, &ldo) && (ldo & 0x0C) != 0x0C) {
+              id(pmic).write_byte(0x90, ldo | 0x0C);
+            }
             // Battery voltage ADC channel (0x30 bit 0), read by the Battery Voltage sensor.
             uint8_t adc;
             if (id(pmic).read_byte(0x30, &adc) && !(adc & 0x01)) {
               id(pmic).write_byte(0x30, adc | 0x01);
             }
-            // TODO: ALDO3 and ALDO4 stay on through deep sleep and could be switched off
-            // before it (enable bits 2 and 3 of reg 0x90) to cut sleep current. Untested, so
-            // measure with a meter first.
+            // TODO: rails_off_in_sleep switches ALDO3 and ALDO4 off for deep sleep (see the
+            // rails_off script). Untested, so measure with a meter before relying on it.
             //   ALDO3: nothing here uses audio, but the codecs share this I2C bus. If they
             //     load SDA/SCL while unpowered the PMIC becomes unreachable, and only pulling
             //     the battery recovers it.
             //   ALDO4: epaper_spi resets and fully re-initialises the panel on every update,
-            //     so it does not need power in between. Turn it back on here at boot, and off
-            //     only once the ESP32 is about to sleep, so no driven pin back-feeds the panel.
+            //     so it does not need power in between. It goes off only once the ESP32 is
+            //     about to sleep, so no driven pin back-feeds the panel.
             // Nothing else can be switched: the SD slot shares DCDC1 with the ESP32 (and
             // draws nothing while empty), and the NS4150B amplifier runs from VSYS, held in
             // shutdown by a pull-down on its CTRL pin (GPIO7).
@@ -119,6 +129,7 @@ script:
             - logger.log:
                 level: WARN
                 format: "Battery low, sleeping without refreshing"
+            - script.execute: rails_off
             - deep_sleep.enter:
                 id: deep_sleep_control
                 sleep_duration: ${low_battery_sleep}
@@ -166,6 +177,7 @@ script:
       - event.trigger:
           id: rendering_events
           event_type: render_complete
+      - delay: ${post_render_delay}
       - script.execute: enter_sleep
   # Sleeps unless Stay Awake is on or the frame is on USB power.
   - id: enter_sleep
@@ -183,9 +195,21 @@ script:
                 state: !lambda return millis() / 1000.0f;
             # Give the events and sensor states time to reach Home Assistant.
             - delay: 2s
+            - script.execute: rails_off
             - deep_sleep.enter:
                 id: deep_sleep_control
                 sleep_duration: !lambda return (uint32_t) (id(sleep_duration).state * 1000);
+  # Run right before deep sleep. on_boot switches the rails back on at the next wake.
+  - id: rails_off
+    then:
+      - lambda: |-
+          if (!${rails_off_in_sleep}) {
+            return;
+          }
+          uint8_t ldo;
+          if (id(pmic).read_byte(0x90, &ldo)) {
+            id(pmic).write_byte(0x90, ldo & ~0x0C);
+          }
 
 switch:
   # Turn on while the frame is awake to keep it up for OTA updates or debugging.
