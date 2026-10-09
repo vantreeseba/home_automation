@@ -24,9 +24,14 @@ esphome:
     - priority: 800
       then:
         - lambda: |-
-            // AXP2101 rails, all 3.3V as in Waveshare's firmware.
-            // DCDC1 (0x82) = 1500mV + n*100mV, ALDO1-4 (0x92-0x95) = 500mV + n*100mV.
-            static const uint8_t RAILS[][2] = {{0x82, 0x12}, {0x92, 0x1C}, {0x93, 0x1C}, {0x94, 0x1C}, {0x95, 0x1C}};
+            // AXP2101 rails, all 3.3V as in Waveshare's firmware. From the board schematic:
+            //   DCDC1 (0x82) = VCC3V3:    ESP32-S3, SD slot, SHTC3, user LEDs, I2C/SD pull-ups
+            //   ALDO3 (0x94) = Audio_VCC: ES8311 codec, ES7210 mic ADC and both mics
+            //   ALDO4 (0x95) = EPD_VCC:   e-paper panel logic and its boost driver
+            //   RTCLDO       = VRTC:      PCF85063 RTC, always on
+            // Every other output (ALDO1/2, BLDO1/2, DLDO1/2, DCDC2-4, CPUSLDO) is unconnected.
+            // DCDC1 = 1500mV + n*100mV, ALDOs = 500mV + n*100mV.
+            static const uint8_t RAILS[][2] = {{0x82, 0x12}, {0x94, 0x1C}, {0x95, 0x1C}};
             for (const auto &rail : RAILS) {
               uint8_t current;
               if (!id(pmic).read_byte(rail[0], &current)) {
@@ -42,10 +47,18 @@ esphome:
             if (id(pmic).read_byte(0x30, &adc) && !(adc & 0x01)) {
               id(pmic).write_byte(0x30, adc | 0x01);
             }
-            // TODO: the audio codec, amplifier and SD slot are never used here but stay
-            // powered through sleep. Switching their rails off could cut sleep current, but
-            // which rail feeds what is not known (Waveshare's firmware leaves them all on),
-            // so measure with a meter and check the schematic before turning any off.
+            // TODO: ALDO3 and ALDO4 stay on through deep sleep and could be switched off
+            // before it (enable bits 2 and 3 of reg 0x90) to cut sleep current. Untested, so
+            // measure with a meter first.
+            //   ALDO3: nothing here uses audio, but the codecs share this I2C bus. If they
+            //     load SDA/SCL while unpowered the PMIC becomes unreachable, and only pulling
+            //     the battery recovers it.
+            //   ALDO4: epaper_spi resets and fully re-initialises the panel on every update,
+            //     so it does not need power in between. Turn it back on here at boot, and off
+            //     only once the ESP32 is about to sleep, so no driven pin back-feeds the panel.
+            // Nothing else can be switched: the SD slot shares DCDC1 with the ESP32 (and
+            // draws nothing while empty), and the NS4150B amplifier runs from VSYS, held in
+            // shutdown by a pull-down on its CTRL pin (GPIO7).
     - priority: -100
       then:
         - script.execute: start_cycle
@@ -57,6 +70,11 @@ i2c:
   scan: false
   frequency: 100kHz
 
+# AXP2101. Its other pins are wired to the ESP32 but not used here:
+#   IRQ    -> GPIO21, active low, pulled up to the RTC supply
+#   CHGLED -> GPIO3
+#   PWRON  -> GPIO5 through an inverting FET, so it reads high while the power key is held
+#   PWROK  -> ESP32 reset (EN)
 i2c_device:
   id: pmic
   address: 0x34
