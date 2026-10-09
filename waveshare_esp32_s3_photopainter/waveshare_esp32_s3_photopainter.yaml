@@ -12,9 +12,11 @@ substitutions:
   # Below this charge the frame stops refreshing and only wakes now and then to check again.
   low_battery_percent: '10'
   low_battery_sleep: 12h
-  # Cut power to the audio chips and the e-paper panel while asleep. Untested: measure the
-  # sleep current before leaving it on, see the notes in the on_boot PMIC lambda.
-  rails_off_in_sleep: 'false'
+  # Cut power to the e-paper panel (ALDO4) or the audio chips (ALDO3) while asleep. Both are
+  # untested: measure the sleep current before leaving one on. The audio one is suspected of
+  # jamming the I2C bus, see the notes in the on_boot PMIC lambda.
+  panel_rail_off_in_sleep: 'false'
+  audio_rail_off_in_sleep: 'false'
 
 packages:
   base:
@@ -49,7 +51,7 @@ esphome:
               }
             }
             // ALDO3 and ALDO4 enables (0x90 bits 2 and 3). The PMIC keeps its settings while
-            // the ESP32 sleeps, so they are still off here if rails_off_in_sleep cut them.
+            // the ESP32 sleeps, so they are still off here if a *_rail_off_in_sleep option cut them.
             uint8_t ldo;
             if (!id(pmic).read_byte(0x90, &ldo)) {
               ESP_LOGW("pmic", "Could not read the LDO enables, audio and panel rails may be off");
@@ -61,11 +63,13 @@ esphome:
             if (id(pmic).read_byte(0x30, &adc) && !(adc & 0x01)) {
               id(pmic).write_byte(0x30, adc | 0x01);
             }
-            // TODO: rails_off_in_sleep switches ALDO3 and ALDO4 off for deep sleep (see the
-            // rails_off script). Untested, so measure with a meter before relying on it.
-            //   ALDO3: nothing here uses audio, but the codecs share this I2C bus. If they
-            //     load SDA/SCL while unpowered the PMIC becomes unreachable, and only pulling
-            //     the battery recovers it.
+            // TODO: audio_rail_off_in_sleep and panel_rail_off_in_sleep switch ALDO3 and ALDO4
+            // off for deep sleep (see the before_sleep script). Untested, so measure with a
+            // meter before relying on either.
+            //   ALDO3: nothing here uses audio, but the codecs sit directly on this I2C bus,
+            //     which has only 10k pull-ups. If they load SDA/SCL while unpowered the PMIC
+            //     becomes unreachable, and only pulling the battery recovers it. A frame was
+            //     seen with SCL held low after this was tried.
             //   ALDO4: epaper_spi resets and fully re-initialises the panel on every update,
             //     so it does not need power in between. It goes off only once the ESP32 is
             //     about to sleep, so no driven pin back-feeds the panel.
@@ -137,7 +141,7 @@ script:
             - logger.log:
                 level: WARN
                 format: "Battery low, sleeping without refreshing"
-            - script.execute: rails_off
+            - script.execute: before_sleep
             - deep_sleep.enter:
                 id: deep_sleep_control
                 sleep_duration: ${low_battery_sleep}
@@ -203,20 +207,22 @@ script:
                 state: !lambda return millis() / 1000.0f;
             # Give the events and sensor states time to reach Home Assistant.
             - delay: 2s
-            - script.execute: rails_off
+            - script.execute: before_sleep
             - deep_sleep.enter:
                 id: deep_sleep_control
                 sleep_duration: !lambda return (uint32_t) (id(sleep_duration).state * 1000);
   # Run right before deep sleep. on_boot switches the rails back on at the next wake.
-  - id: rails_off
+  - id: before_sleep
     then:
       - lambda: |-
-          if (!${rails_off_in_sleep}) {
-            return;
-          }
+          // The SHTC3 driver sleeps the sensor after each reading, but leaves it idle
+          // (drawing far more) on a wake where nothing was read.
+          id(climate).sleep();
+          // 0x90 bit 2 = ALDO3 (audio), bit 3 = ALDO4 (panel).
+          const uint8_t off = (${audio_rail_off_in_sleep} ? 0x04 : 0) | (${panel_rail_off_in_sleep} ? 0x08 : 0);
           uint8_t ldo;
-          if (id(pmic).read_byte(0x90, &ldo)) {
-            id(pmic).write_byte(0x90, ldo & ~0x0C);
+          if (off != 0 && id(pmic).read_byte(0x90, &ldo)) {
+            id(pmic).write_byte(0x90, ldo & ~off);
           }
 
 switch:
