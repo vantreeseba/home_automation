@@ -24,11 +24,10 @@ packages:
     ref: main
     files:
       - shared_packages/default_base.yaml
-    refresh: always
-    
+
 esphome:
-  # First release with the sendspin image platform and no external components needed.
-  min_version: 2026.9.0
+  # First release with wifi lease_cache and the logger boot log buffer used below.
+  min_version: 2026.11.0
   on_boot:
     - priority: 800
       then:
@@ -140,6 +139,29 @@ esphome:
       then:
         - script.execute: start_cycle
 
+# Merges into the wifi block from the base package. Both options cut the time the radio is
+# up on every wake, which is most of the energy a wake costs.
+wifi:
+  # Join the access point saved on the last wake without scanning first. RTC storage
+  # survives deep sleep without wearing flash, and a power loss just means one full scan.
+  fast_connect:
+    enabled: true
+    storage: rtc
+  # Re-apply the last DHCP lease after a deep-sleep wake instead of running DHCP (ESP-IDF
+  # only, and ignored if manual_ip is set). The address is not re-checked, so max_age caps
+  # how long a stale one can be reused if the router hands it to another device.
+  lease_cache:
+    storage: rtc
+    max_age: 12h
+
+# The PMIC setup in on_boot logs before Home Assistant is listening. Keep those lines and
+# replay them once a client connects (see api on_client_connected), so the first wakes
+# show which rails and interrupts were changed.
+logger:
+  boot_log_buffer_size: 2kB
+  boot_logs:
+    pmic: INFO
+
 i2c:
   id: bus
   sda: GPIO47
@@ -178,6 +200,9 @@ api:
     - component.update: climate
     - component.update: wifi_signal_sensor
     - component.update: wake_reason
+    # Give the client time to subscribe to logs before replaying the boot lines.
+    - delay: 2s
+    - logger.replay_boot_logs:
 
 deep_sleep:
   id: deep_sleep_control
