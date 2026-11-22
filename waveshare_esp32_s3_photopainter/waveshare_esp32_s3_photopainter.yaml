@@ -457,7 +457,8 @@ image:
     sendspin_id: sendspin_hub
     # JPEG, not PNG: a full-size PNG can pass the artwork slot's 131072 byte cap and is
     # then dropped, leaving the frame awake until max_awake_time. JPEG also decodes faster.
-    format: JPEG
+    # format: JPEG
+    format: PNG
     type: RGB
     resize: ${display_pixel_height}x${display_pixel_width}
     source: ALBUM
