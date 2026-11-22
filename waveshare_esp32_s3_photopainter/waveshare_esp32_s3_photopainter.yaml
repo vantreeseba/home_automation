@@ -32,12 +32,14 @@ esphome:
     - priority: 800
       then:
         - lambda: |-
-            // AXP2101 rails, all 3.3V as in Waveshare's firmware. From the board schematic:
+            // The board's PMIC is an X-Powers TG28, register-compatible with the AXP2101.
+            // Rails, all 3.3V as in Waveshare's firmware. From the board schematic:
             //   DCDC1 (0x82) = VCC3V3:    ESP32-S3, SD slot, SHTC3, user LEDs, I2C/SD pull-ups
             //   ALDO3 (0x94) = Audio_VCC: ES8311 codec, ES7210 mic ADC and both mics
             //   ALDO4 (0x95) = EPD_VCC:   e-paper panel logic and its boost driver
             //   RTCLDO       = VRTC:      PCF85063 RTC, always on
             // Every other output (ALDO1/2, BLDO1/2, DLDO1/2, DCDC2-4, CPUSLDO) is unconnected.
+            // DCDC5 has an inductor and output caps fitted, so it is left alone.
             // DCDC1 = 1500mV + n*100mV, ALDOs = 500mV + n*100mV.
             static const uint8_t RAILS[][2] = {{0x82, 0x12}, {0x94, 0x1C}, {0x95, 0x1C}};
             for (const auto &rail : RAILS) {
@@ -63,6 +65,60 @@ esphome:
             if (id(pmic).read_byte(0x30, &adc) && !(adc & 0x01)) {
               id(pmic).write_byte(0x30, adc | 0x01);
             }
+
+            // Clears the given bits in a PMIC register, leaving the rest as they are.
+            auto clear_bits = [](uint8_t reg, uint8_t mask) {
+              uint8_t value;
+              if (!id(pmic).read_byte(reg, &value)) {
+                ESP_LOGW("pmic", "Could not read register 0x%02X to clear bits 0x%02X", reg, mask);
+                return;
+              }
+              bool already_clear = (value & mask) == 0;
+              if (already_clear) {
+                return;
+              }
+              ESP_LOGI("pmic", "Register 0x%02X: 0x%02X -> 0x%02X", reg, value, value & ~mask);
+              id(pmic).write_byte(reg, value & ~mask);
+            };
+
+            // Interrupts. Nothing here reads the IRQ line (GPIO21), but it has a 10k pull-up
+            // to VRTC, so while any interrupt is pending it sinks about 330uA from the battery,
+            // asleep or not. Several sources are on by default (USB insert/remove, charge
+            // start/done, and "new battery percentage", which fires as the battery drains
+            // during sleep), and nothing ever cleared them, so the line was likely held low
+            // most of the time. Disable every source, then clear anything already pending.
+            //   0x40-0x42 = IRQ enables, 0x48-0x4A = IRQ status (write 1 to clear).
+            // Neither affects the status registers the sensors read (0x00, 0x01, 0xA4).
+            static const uint8_t IRQ_ENABLE_REGS[] = {0x40, 0x41, 0x42};
+            static const uint8_t IRQ_STATUS_REGS[] = {0x48, 0x49, 0x4A};
+            for (uint8_t reg : IRQ_ENABLE_REGS) {
+              if (!id(pmic).write_byte(reg, 0x00)) {
+                ESP_LOGW("pmic", "Could not disable IRQ sources in 0x%02X, the IRQ line may stay low", reg);
+              }
+            }
+            for (uint8_t reg : IRQ_STATUS_REGS) {
+              if (!id(pmic).write_byte(reg, 0xFF)) {
+                ESP_LOGW("pmic", "Could not clear IRQ status 0x%02X, the IRQ line may stay low", reg);
+              }
+            }
+
+            // Outputs whose pins are unconnected on the schematic. The DCDCs are almost
+            // certainly off already (the PMIC shuts down on DCDC under-voltage, which an
+            // enabled DCDC with no inductor would hit), so this mostly makes sure the LDOs
+            // are not burning quiescent current. The log line above shows anything it changed.
+            //   0x80 bits 1-3 = DCDC2-4 enable
+            //   0x90 bits 0,1 = ALDO1/2, bits 4,5 = BLDO1/2, bit 6 = CPUSLDO, bit 7 = DLDO1
+            //   0x91 bit 0    = DLDO2
+            clear_bits(0x80, 0x0E);
+            clear_bits(0x90, 0xF3);
+            clear_bits(0x91, 0x01);
+
+            // Let the DCDCs drop to PFM at light load (the chip default), so DCDC1 is not
+            // switching at full rate while the ESP32 sleeps.
+            //   0x80 bit 6 = force CCM, 0x81 bits 2-5 = force PWM on DCDC1-4
+            clear_bits(0x80, 0x40);
+            clear_bits(0x81, 0x3C);
+
             // TODO: audio_rail_off_in_sleep and panel_rail_off_in_sleep switch ALDO3 and ALDO4
             // off for deep sleep (see the before_sleep script). Untested, so measure with a
             // meter before relying on either.
@@ -76,6 +132,9 @@ esphome:
             // Nothing else can be switched: the SD slot shares DCDC1 with the ESP32 (and
             // draws nothing while empty), and the NS4150B amplifier runs from VSYS, held in
             // shutdown by a pull-down on its CTRL pin (GPIO7).
+            // Known hardware leak, not fixable here: the PWRON sense FET on GPIO5 is on while
+            // the power key is released, so its 10k pull-up (R24) draws about 330uA from
+            // VCC3V3 whenever the ESP32 is powered. Lifting R24 removes it.
     - priority: -100
       then:
         - script.execute: start_cycle
@@ -87,8 +146,8 @@ i2c:
   scan: false
   frequency: 100kHz
 
-# AXP2101. Its other pins are wired to the ESP32 but not used here:
-#   IRQ    -> GPIO21, active low, pulled up to the RTC supply
+# TG28 (AXP2101-compatible). Its other pins are wired to the ESP32 but not used here:
+#   IRQ    -> GPIO21, active low, pulled up to the RTC supply (watched by PMIC IRQ below)
 #   CHGLED -> GPIO3
 #   PWRON  -> GPIO5 through an inverting FET, so it reads high while the power key is held
 #   PWROK  -> ESP32 reset (EN)
@@ -131,7 +190,7 @@ script:
       - if:
           condition:
             lambda: |-
-              // AXP2101 reg 0x00: bit 5 = USB power present, bit 3 = battery connected.
+              // PMIC reg 0x00: bit 5 = USB power present, bit 3 = battery connected.
               uint8_t status, percent;
               if (!id(pmic).read_byte(0x00, &status) || !id(pmic).read_byte(0xA4, &percent)) {
                 return false;
@@ -218,6 +277,12 @@ script:
           // The SHTC3 driver sleeps the sensor after each reading, but leaves it idle
           // (drawing far more) on a wake where nothing was read.
           id(climate).sleep();
+          // Release the PMIC IRQ line for the whole sleep. on_boot disabled every source,
+          // so this only catches something set since then.
+          static const uint8_t IRQ_STATUS_REGS[] = {0x48, 0x49, 0x4A};
+          for (uint8_t reg : IRQ_STATUS_REGS) {
+            id(pmic).write_byte(reg, 0xFF);
+          }
           // 0x90 bit 2 = ALDO3 (audio), bit 3 = ALDO4 (panel).
           const uint8_t off = (${audio_rail_off_in_sleep} ? 0x04 : 0) | (${panel_rail_off_in_sleep} ? 0x08 : 0);
           uint8_t ldo;
@@ -265,6 +330,18 @@ binary_sensor:
               script.is_running: render_and_sleep
           then:
             - script.execute: awake_timeout
+  # On means the PMIC is holding its IRQ line low, costing about 330uA through the pull-up.
+  # It should stay off now that on_boot disables every interrupt source.
+  - platform: gpio
+    id: pmic_irq
+    name: PMIC IRQ
+    device_class: problem
+    entity_category: diagnostic
+    pin:
+      number: GPIO21
+      inverted: true
+      mode:
+        input: true
 
 text_sensor:
   - platform: template
@@ -308,7 +385,7 @@ interval:
   - interval: 5s
     then:
       - lambda: |-
-          // AXP2101 reg 0x00 bit 5 = USB power present, reg 0x01 bits 2:0 = charger state.
+          // PMIC reg 0x00 bit 5 = USB power present, reg 0x01 bits 2:0 = charger state.
           uint8_t status, charger;
           if (!id(pmic).read_byte(0x00, &status) || !id(pmic).read_byte(0x01, &charger)) {
             return;
@@ -416,7 +493,7 @@ sensor:
     accuracy_decimals: 0
     update_interval: 15s
     lambda: |-
-      // AXP2101 reg 0xA4 = battery percentage
+      // PMIC reg 0xA4 = battery percentage
       uint8_t percent;
       if (!id(pmic).read_byte(0xA4, &percent)) {
         return {};
@@ -431,7 +508,7 @@ sensor:
     entity_category: diagnostic
     update_interval: 15s
     lambda: |-
-      // AXP2101 regs 0x34/0x35 = battery voltage in mV (upper 5 bits, lower 8 bits)
+      // PMIC regs 0x34/0x35 = battery voltage in mV (upper 5 bits, lower 8 bits)
       uint8_t high, low;
       if (!id(pmic).read_byte(0x34, &high) || !id(pmic).read_byte(0x35, &low)) {
         return {};
