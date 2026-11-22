@@ -24,7 +24,8 @@ packages:
     ref: main
     files:
       - shared_packages/default_base.yaml
-
+    refresh: always
+    
 esphome:
   # First release with the sendspin image platform and no external components needed.
   min_version: 2026.9.0
