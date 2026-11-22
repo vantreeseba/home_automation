@@ -309,8 +309,15 @@ script:
           for (uint8_t reg : IRQ_STATUS_REGS) {
             id(pmic).write_byte(reg, 0xFF);
           }
+          // The substitutions arrive as text: 'true', or True when a device file writes the
+          // value unquoted (YAML turns it into a boolean, which renders as Python's True).
+          auto is_enabled = [](const char *value) {
+            return strcasecmp(value, "true") == 0;
+          };
+          const bool cut_audio_rail = is_enabled("${audio_rail_off_in_sleep}");
+          const bool cut_panel_rail = is_enabled("${panel_rail_off_in_sleep}");
           // 0x90 bit 2 = ALDO3 (audio), bit 3 = ALDO4 (panel).
-          const uint8_t off = (${audio_rail_off_in_sleep} ? 0x04 : 0) | (${panel_rail_off_in_sleep} ? 0x08 : 0);
+          const uint8_t off = (cut_audio_rail ? 0x04 : 0) | (cut_panel_rail ? 0x08 : 0);
           uint8_t ldo;
           if (off != 0 && id(pmic).read_byte(0x90, &ldo)) {
             id(pmic).write_byte(0x90, ldo & ~off);
